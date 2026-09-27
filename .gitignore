@@ -1,0 +1,17 @@
+# Godot 4 import cache
+.godot/
+
+# Export artifacts
+build/
+export/
+*.pck
+*.zip
+
+# Shared contract junctions (created by scripts/link_shared.ps1)
+client/shared
+server/shared
+
+# Runtime SQLite database (lives under user://, never in the repo)
+*.db
+*.db-wal
+*.db-shm
