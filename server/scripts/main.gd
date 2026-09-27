@@ -7,6 +7,8 @@ extends Node
 
 var db: DBService
 var persistence: PersistenceService
+var persistence_inventory: PersistenceInventory
+var inventory: InventoryService
 var auth: AuthService
 var combat: CombatService
 var router: IntentRouter
@@ -63,6 +65,22 @@ func _ready() -> void:
 	persistence.db = db
 	add_child(persistence)
 
+	# --- WB3 inventory (items / equipment) ---------------------------------
+	# WB3 owns server/scripts/inventory.gd + persistence_inventory.gd; this block
+	# is the only edit to this shared file. Remove/replace it wholesale if WB3 is
+	# reverted.
+	persistence_inventory = PersistenceInventory.new()
+	persistence_inventory.name = "PersistenceInventory"
+	persistence_inventory.db = db
+	add_child(persistence_inventory)
+
+	inventory = InventoryService.new()
+	inventory.name = "Inventory"
+	inventory.world = world
+	inventory.persistence = persistence_inventory
+	add_child(inventory)
+	# --- end WB3 wiring ----------------------------------------------------
+
 	auth = AuthService.new()
 	auth.name = "Auth"
 	auth.db = db
@@ -79,6 +97,10 @@ func _ready() -> void:
 	add_child(router)
 	router.register("input_received", _on_input)
 	router.register("use_ability_requested", _on_use_ability)
+	# WB3: inventory intents -> InventoryService (see the WB3 wiring block above).
+	router.register("move_item_requested", Callable(inventory, "handle_move"))
+	router.register("equip_item_requested", Callable(inventory, "handle_equip"))
+	router.register("unequip_item_requested", Callable(inventory, "handle_unequip"))
 
 	session_flow = SessionFlow.new()
 	session_flow.name = "SessionFlow"
