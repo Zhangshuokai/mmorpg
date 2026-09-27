@@ -1,0 +1,5 @@
+# Static data tables live here as `*.json`, one file per workbench
+# (abilities.json -> WB2, items.json -> WB3, zones.json -> WB5, ...).
+# shared/data/data_tables.gd globs this directory, so registering a table never
+# touches a shared manifest. Keep this file so the (otherwise empty) directory
+# is tracked by git.

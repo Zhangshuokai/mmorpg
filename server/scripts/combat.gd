@@ -12,8 +12,15 @@ var world: WorldService
 
 ## Called for c2s_use_ability. `attacker_id` comes from the RPC sender id, never
 ## from client data.
-func use_ability(attacker_id: int, target_id: int) -> void:
+##
+## WB0 froze the wire signature with an `ability_id`; the current implementation
+## only has the melee ability (Protocol.AbilityId.MELEE) and ignores the id, so
+## behaviour is unchanged. WB2 replaces this with the data-driven skill table.
+func use_ability(attacker_id: int, ability_id: int, target_id: int) -> void:
 	if world == null:
+		return
+	if ability_id != Protocol.AbilityId.MELEE:
+		print("[combat] unknown ability %d from %d ignored" % [ability_id, attacker_id])
 		return
 	var reason := _reject_reason(attacker_id, target_id)
 	if reason != "":
@@ -22,7 +29,7 @@ func use_ability(attacker_id: int, target_id: int) -> void:
 	world.cooldowns[attacker_id] = Protocol.MELEE_COOLDOWN
 	var attacker: EntityState = world.entities[attacker_id]
 	attacker.target_id = target_id
-	world.apply_damage(target_id, Protocol.MELEE_DAMAGE, attacker_id)
+	world.apply_damage(target_id, Formulas.melee_damage(Protocol.MELEE_DAMAGE, 0), attacker_id)
 
 
 func _reject_reason(attacker_id: int, target_id: int) -> String:

@@ -1,16 +1,21 @@
 extends Node
-## Dedicated-server entry point: wires services together, opens UDP 7000 and
-## services the account/character session flow.
+## Dedicated-server entry point: pure assembly. Opens the configured UDP port,
+## wires the services, intent router and session flow, and services lifecycle.
 ##
 ## Run with:
-##   godot --headless --path server -- --server
-
-const MAX_CHARACTERS_PER_ACCOUNT := 5
+##   godot --headless --path server -- --server [--port N] [--db PATH] [--no-mobs]
 
 var db: DBService
 var persistence: PersistenceService
 var auth: AuthService
 var combat: CombatService
+var router: IntentRouter
+var bootstrap: Bootstrap
+var session_flow: SessionFlow
+
+## Overridable via --port / --db (worktree isolation: one port + one DB each).
+var server_port := Protocol.SERVER_PORT
+var db_path := ""
 
 @onready var world: WorldService = $World
 
@@ -22,10 +27,12 @@ func _ready() -> void:
 	# (one _physics_process call == one world tick); the value in project.godot
 	# is only the editor default and is overridden here before anything simulates.
 	Engine.physics_ticks_per_second = Protocol.TICK_HZ
-	print("[server] Godot %s | mode=%s | tick=%dHz | user args=%s" % [
+	_parse_args()
+	print("[server] Godot %s | mode=%s | tick=%dHz | port=%d | user args=%s" % [
 		Engine.get_version_info().get("string", "?"),
 		DisplayServer.get_name(),
 		Engine.physics_ticks_per_second,
+		server_port,
 		OS.get_cmdline_user_args(),
 	])
 	if Engine.physics_ticks_per_second != Protocol.TICK_HZ:
@@ -35,9 +42,19 @@ func _ready() -> void:
 
 	db = DBService.new()
 	db.name = "DB"
+	if not db_path.is_empty():
+		db.db_path = db_path
 	add_child(db)
 	if not db.is_open:
 		push_error("[server] database unavailable; shutting down")
+		get_tree().quit(1)
+		return
+
+	# Migrations + static-data validation before anything reads the schema.
+	bootstrap = Bootstrap.new()
+	bootstrap.name = "Bootstrap"
+	add_child(bootstrap)
+	if not bootstrap.run(db):
 		get_tree().quit(1)
 		return
 
@@ -57,16 +74,24 @@ func _ready() -> void:
 	combat.world = world
 	add_child(combat)
 
+	router = IntentRouter.new()
+	router.name = "IntentRouter"
+	add_child(router)
+	router.register("input_received", _on_input)
+	router.register("use_ability_requested", _on_use_ability)
+
+	session_flow = SessionFlow.new()
+	session_flow.name = "SessionFlow"
+	session_flow.auth = auth
+	session_flow.persistence = persistence
+	session_flow.world = world
+	session_flow.router = router
+	add_child(session_flow)
+
 	if _user_args_has("--no-mobs"):
 		world.spawn_mobs_enabled = false
 		print("[server] --no-mobs: enemy spawning disabled (multiplayer debug mode)")
 	world.setup(persistence)
-
-	Net.input_received.connect(_on_input)
-	Net.use_ability_requested.connect(_on_use_ability)
-	Net.list_characters_requested.connect(_on_list_characters)
-	Net.create_character_requested.connect(_on_create_character)
-	Net.select_character_requested.connect(_on_select_character)
 
 	_save_timer = Timer.new()
 	_save_timer.name = "SaveTimer"
@@ -76,6 +101,24 @@ func _ready() -> void:
 	add_child(_save_timer)
 
 	_start_network()
+
+
+func _parse_args() -> void:
+	var args := OS.get_cmdline_user_args()
+	var i := 0
+	while i < args.size():
+		var arg: String = args[i]
+		if arg == "--port" and i + 1 < args.size():
+			i += 1
+			server_port = int(args[i])
+		elif arg == "--db" and i + 1 < args.size():
+			i += 1
+			db_path = args[i]
+		elif arg.begins_with("--port="):
+			server_port = int(arg.substr("--port=".length()))
+		elif arg.begins_with("--db="):
+			db_path = arg.substr("--db=".length())
+		i += 1
 
 
 func _is_server_mode() -> bool:
@@ -90,9 +133,9 @@ func _user_args_has(flag: String) -> bool:
 
 func _start_network() -> void:
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(Protocol.SERVER_PORT, Protocol.MAX_CLIENTS)
+	var err := peer.create_server(server_port, Protocol.MAX_CLIENTS)
 	if err != OK:
-		push_error("[server] cannot listen on UDP %d: %s" % [Protocol.SERVER_PORT, error_string(err)])
+		push_error("[server] cannot listen on UDP %d: %s" % [server_port, error_string(err)])
 		get_tree().quit(1)
 		return
 	multiplayer.multiplayer_peer = peer
@@ -102,7 +145,7 @@ func _start_network() -> void:
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.peer_authentication_failed.connect(_on_peer_authentication_failed)
 	print("[server] listening on UDP %d (max %d clients, tick %dHz)" % [
-		Protocol.SERVER_PORT, Protocol.MAX_CLIENTS, Protocol.TICK_HZ])
+		server_port, Protocol.MAX_CLIENTS, Protocol.TICK_HZ])
 
 
 func _on_peer_connected(peer_id: int) -> void:
@@ -125,80 +168,14 @@ func _on_peer_authentication_failed(peer_id: int) -> void:
 	auth.forget(peer_id)
 
 
-# --- client intents ---------------------------------------------------------
+# --- client intents (registered with the router) ----------------------------
 
 func _on_input(sender: int, seq: int, move: Vector2, yaw: float, buttons: int) -> void:
 	world.set_input(sender, seq, move, yaw, buttons)
 
 
-func _on_use_ability(sender: int, target_id: int) -> void:
-	combat.use_ability(sender, target_id)
-
-
-func _on_list_characters(sender: int) -> void:
-	var account_id := auth.account_for(sender)
-	if account_id < 0:
-		return
-	_send_character_list(sender, account_id)
-
-
-func _on_create_character(sender: int, char_name: String, class_id: int) -> void:
-	var account_id := auth.account_for(sender)
-	if account_id < 0:
-		return
-	var name := char_name.strip_edges()
-	if not _valid_char_name(name):
-		print("[server] peer %d requested invalid character name '%s'" % [sender, char_name])
-		_send_character_list(sender, account_id)
-		return
-	if persistence.character_count(account_id) >= MAX_CHARACTERS_PER_ACCOUNT:
-		print("[server] peer %d exceeded character limit" % sender)
-		_send_character_list(sender, account_id)
-		return
-	if class_id != Protocol.ClassId.WARRIOR:
-		class_id = Protocol.ClassId.WARRIOR
-	var result := persistence.create_character(account_id, name, class_id)
-	if not result.get("ok", false):
-		print("[server] create_character for peer %d failed: %s" % [sender, result.get("reason", "?")])
-	_send_character_list(sender, account_id)
-
-
-func _on_select_character(sender: int, char_id: int) -> void:
-	var account_id := auth.account_for(sender)
-	if account_id < 0:
-		return
-	var sheet := persistence.get_character(char_id)
-	if sheet == null or sheet.account_id != account_id:
-		print("[server] peer %d tried to select unowned character %d" % [sender, char_id])
-		_send_character_list(sender, account_id)
-		return
-	world.add_player(sender, sheet)
-
-
-func _send_character_list(sender: int, account_id: int) -> void:
-	var payload: Array = []
-	for row: Dictionary in persistence.characters_for(account_id):
-		payload.append(CharacterSheet.from_row(row).to_dict())
-	Net.s2c_character_list.rpc_id(sender, payload)
-
-
-## Explicit ASCII allowlist: [A-Za-z0-9_]. A blocklist would still let through
-## zero-width, bidi-override and other format characters, which would be stored
-## and then rendered verbatim in every other player's name tag (impersonation /
-## blank nameplates).
-func _valid_char_name(name: String) -> bool:
-	var length := name.length()
-	if length < Protocol.NAME_MIN or length > Protocol.NAME_MAX:
-		return false
-	for i in length:
-		var code := name.unicode_at(i)
-		var is_digit := code >= 48 and code <= 57
-		var is_upper := code >= 65 and code <= 90
-		var is_lower := code >= 97 and code <= 122
-		var is_underscore := code == 95
-		if not (is_digit or is_upper or is_lower or is_underscore):
-			return false
-	return true
+func _on_use_ability(sender: int, ability_id: int, target_id: int) -> void:
+	combat.use_ability(sender, ability_id, target_id)
 
 
 # --- lifecycle --------------------------------------------------------------

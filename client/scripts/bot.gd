@@ -1,18 +1,21 @@
 class_name BotClient
 extends Node
-## Headless self-test for the whole loop. It behaves exactly like a player client
-## (it only ever uploads input and intents) and exits with code 0 only if the
+## Headless self-test runner. It behaves exactly like a player client (it only
+## ever uploads input and intents) and exits with code 0 only if the
 ## server-authoritative chain works end to end.
 ##
 ##   godot --headless --path client -- --bot --host 127.0.0.1 [--bot-user name]
+##
+## WB0 split the assertions into client/scripts/bot_checks/*.gd (auto-registered
+## below). This file only owns the connection phases, timeouts and reporting.
 
 const OVERALL_TIMEOUT_SEC := 90.0
 const PLAY_TIMEOUT_SEC := 45.0
 const ATTACK_INTERVAL_SEC := 1.05
-const MOVE_EPSILON := 1.0
 
 var net: NetworkClient
 var host := Protocol.DEFAULT_HOST
+var port := Protocol.SERVER_PORT
 var username := ""
 var password := "botpass123"
 var char_name := ""
@@ -61,9 +64,10 @@ var _mobs: Dictionary = {}
 var _players: Dictionary = {}
 var _remote_start: Dictionary = {}
 var _remote_travel := 0.0
-var _seq := 0
-var _send_accum := 0.0
 var _attack_accum := 0.0
+
+## BotCheck instances, glob-discovered from res://scripts/bot_checks.
+var _checks: Array = []
 
 
 func _ready() -> void:
@@ -76,6 +80,7 @@ func _ready() -> void:
 	# exact same line and remote movement is unambiguous.
 	_wander_yaw = float(absi(username.hash()) % 628) / 100.0
 
+	_load_checks()
 	print("[bot] mode=%s" % ("multiplayer-only" if multiplayer_only else "combat"))
 
 	Net.login_result_received.connect(_on_login_result)
@@ -87,8 +92,36 @@ func _ready() -> void:
 	Net.combat_event_received.connect(_on_combat_event)
 	Net.hp_update_received.connect(_on_hp_update)
 
-	print("[bot] username=%s character=%s server=%s:%d" % [username, char_name, host, Protocol.SERVER_PORT])
+	print("[bot] username=%s character=%s server=%s:%d" % [username, char_name, host, port])
 	_try_login()
+
+
+## Discovers every BotCheck module so a workbench can add assertions by dropping
+## a file into res://scripts/bot_checks without touching this runner.
+func _load_checks() -> void:
+	_checks.clear()
+	var dir := DirAccess.open("res://scripts/bot_checks")
+	if dir == null:
+		push_warning("[bot] bot_checks directory missing; no assertions loaded")
+		return
+	var paths: Array[String] = []
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if not dir.current_is_dir() and file_name.ends_with(".gd") \
+				and file_name != "bot_check.gd":
+			paths.append("res://scripts/bot_checks/".path_join(file_name))
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	paths.sort()
+	for path in paths:
+		var script: GDScript = load(path)
+		if script == null:
+			continue
+		var check: Variant = script.new()
+		if check is BotCheck:
+			(check as BotCheck).bot = self
+			_checks.append(check)
 
 
 func _try_login() -> void:
@@ -264,16 +297,12 @@ func _process(delta: float) -> void:
 			if distance > Protocol.MELEE_RANGE * 0.75:
 				move = Vector2(0.0, 1.0)
 
-	_send_accum += delta
-	if _send_accum >= Protocol.TICK_DT:
-		_send_accum = 0.0
-		_seq += 1
-		net.send_input(_seq, move, yaw, 0)
+	net.tick_input(delta, move, yaw, 0)
 
 	_attack_accum += delta
 	if not multiplayer_only and target_id != 0 and distance <= Protocol.MELEE_RANGE and _attack_accum >= ATTACK_INTERVAL_SEC:
 		_attack_accum = 0.0
-		net.use_ability(target_id)
+		net.use_ability(Protocol.AbilityId.MELEE, target_id)
 
 	if run_seconds <= 0.0 and _all_checks_pass():
 		_finish()
@@ -294,57 +323,40 @@ func _nearest_living_mob() -> int:
 	return best_id
 
 
+## A run passes only when every `required` assertion holds. `optional` ones are
+## reported but never fail the run.
 func _all_checks_pass() -> bool:
-	var remote_ok := (not require_remote) or _remote_travel >= MOVE_EPSILON
-	var respawn_ok := (not require_respawn) or _respawn_seen
-	var self_ok := _self_hp > 0 and _self_max_hp == Protocol.PLAYER_MAX_HP
-	if multiplayer_only:
-		return _login_ok and _list_received and _enter_world \
-			and _moved >= MOVE_EPSILON and _ticks > 0 and remote_ok and self_ok
-	return _login_ok and _list_received and _enter_world \
-		and _moved >= MOVE_EPSILON and _combat_seen and _kill_seen \
-		and remote_ok and respawn_ok and self_ok
+	for result: Dictionary in _evaluate_all():
+		if bool(result.get("required", false)) and not bool(result.get("ok", false)):
+			return false
+	return true
+
+
+func _evaluate_all() -> Array:
+	var results: Array = []
+	for check: BotCheck in _checks:
+		results.append_array(check.evaluate())
+	results.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("order", 0)) < int(b.get("order", 0)))
+	return results
 
 
 # --- reporting --------------------------------------------------------------
 
-func _check(name: String, ok: bool, detail: String = "") -> void:
-	var line := "[bot] CHECK %s=%s" % [name, "OK" if ok else "FAIL"]
-	if not detail.is_empty():
-		line += " (%s)" % detail
-	print(line)
-
-
-func _check_optional(name: String, ok: bool, detail: String = "") -> void:
-	var line := "[bot] CHECK %s=%s" % [name, "OK" if ok else "N/A"]
-	if not detail.is_empty():
-		line += " (%s)" % detail
-	print(line)
-
-
 func _report() -> void:
-	_check("login", _login_ok)
-	_check("character_list", _list_received)
-	_check("enter_world", _enter_world, "entity=%d" % _self_id)
-	_check("local_hp", _self_hp > 0 and _self_max_hp == Protocol.PLAYER_MAX_HP, "%d/%d" % [_self_hp, _self_max_hp])
-	_check_optional("local_name", not _self_name.is_empty(), _self_name)
-	_check("movement", _moved >= MOVE_EPSILON, "moved %.2fm" % _moved)
-	_check("world_state_ticks", _ticks > 0, "%d ticks" % _ticks)
-	if multiplayer_only:
-		_check_optional("combat_event", _combat_seen, "dealt %d damage" % _damage_dealt)
-		_check_optional("mob_kill", _kill_seen)
-	else:
-		_check("combat_event", _combat_seen, "dealt %d damage" % _damage_dealt)
-		_check("mob_kill", _kill_seen)
-	if require_respawn:
-		_check("mob_respawn", _respawn_seen)
-	else:
-		_check_optional("mob_respawn", _respawn_seen)
-	_check_optional("took_damage", _damage_taken > 0, "%d damage taken" % _damage_taken)
-	if require_remote:
-		_check("remote_player_moved", _remote_travel >= MOVE_EPSILON, "%.2fm" % _remote_travel)
-	else:
-		_check_optional("remote_player_moved", _remote_travel >= MOVE_EPSILON, "%.2fm" % _remote_travel)
+	for result: Dictionary in _evaluate_all():
+		var name := String(result.get("name", "?"))
+		var ok := bool(result.get("ok", false))
+		var required := bool(result.get("required", false))
+		var detail := String(result.get("detail", ""))
+		var line := "[bot] CHECK %s=" % name
+		if required:
+			line += "OK" if ok else "FAIL"
+		else:
+			line += "OK" if ok else "N/A"
+		if not detail.is_empty():
+			line += " (%s)" % detail
+		print(line)
 
 
 func _finish() -> void:

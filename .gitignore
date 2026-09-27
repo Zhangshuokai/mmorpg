@@ -15,3 +15,9 @@ server/shared
 *.db
 *.db-wal
 *.db-shm
+
+# Per-worktree local state (isolated ports/DBs; never committed)
+.local/
+
+# Agent Manager managed worktrees (owned by the tool, not the repo)
+.kilo/worktrees/**
