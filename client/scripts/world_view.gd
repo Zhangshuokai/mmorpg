@@ -19,10 +19,31 @@ var local_id: int = 0
 var target_id: int = 0
 var in_world := false
 
+## The local player's node is driven by prediction (WB6), not by interpolating
+## the authoritative stream; discovered lazily because setup() runs before this
+## node is parented (see client/scripts/main.gd assembly order).
+var _net: NetworkClient
+
 
 func setup(p_world_root: Node3D, p_rig: CameraRig) -> void:
 	world_root = p_world_root
 	rig = p_rig
+
+
+func _ready() -> void:
+	_net = get_parent().get_node_or_null("NetworkClient") as NetworkClient
+
+
+## Local prediction is applied at input time; mirror it onto the EntityView every
+## frame for a smooth, zero-latency local character.
+func _process(_delta: float) -> void:
+	if local_view == null or _net == null or _net.input == null:
+		return
+	var predictor: Prediction = _net.input.predictor
+	if predictor == null or not predictor.active:
+		return
+	local_view.set_predicted_position(predictor.render_position())
+	local_view.set_predicted_yaw(predictor.last_yaw)
 
 
 func enter_world(self_id: int, spawn: Vector3, _hp: int) -> void:
@@ -47,6 +68,9 @@ func spawn_entity(state: Dictionary) -> void:
 	entities[id] = view
 	if id == local_id and kind == Protocol.EntityKind.PLAYER:
 		local_view = view
+		view.local_predicted = true
+		if _net != null and _net.input != null:
+			view.set_predicted_position(_net.input.predictor.render_position())
 		rig.follow_target = view
 
 
@@ -68,8 +92,11 @@ func apply_world_state(_tick: int, list: Array) -> void:
 	for entry: Dictionary in list:
 		var id := int(entry.get("id", 0))
 		var view := entities.get(id) as EntityView
-		if view != null:
-			view.apply_state(entry)
+		if view == null:
+			continue
+		# The local player's transform is owned by NetInput's prediction; the
+		# authoritative snapshot still drives hp/alive/target but never its pos.
+		view.apply_state(entry, id == local_id)
 
 
 func apply_hp_update(id: int, hp: int) -> void:
