@@ -10,6 +10,10 @@ const MAP_HALF := Protocol.MAP_HALF
 
 var persistence: PersistenceService
 
+## Debug switch (server --no-mobs): when false the world starts with no enemies,
+## which lets multiplayer/player-replication be exercised in isolation.
+var spawn_mobs_enabled := true
+
 ## All replicated entities: peer_id (players) or MOB_ID_BASE+i (mobs).
 var entities: Dictionary = {}
 ## peer_id -> {"seq": int, "move": Vector2, "yaw": float, "buttons": int}
@@ -20,6 +24,11 @@ var sessions: Dictionary = {}
 var cooldowns: Dictionary = {}
 ## id -> unix msec when the entity respawns
 var respawn_at: Dictionary = {}
+## Entity ids whose despawn still has to be broadcast, flushed on the next tick.
+## Sending them inline from the peer_disconnected callback races ENet's teardown:
+## a peer that lost its channels in the same frame makes every send fail with
+## "Unable to send packet on channel 0, max channels: 0".
+var _pending_despawn: Array[int] = []
 ## mob id -> unix msec of next melee swing
 var _mob_next_attack: Dictionary = {}
 
@@ -32,7 +41,8 @@ func setup(p_persistence: PersistenceService) -> void:
 	persistence = p_persistence
 	if not _built:
 		_build_map()
-		_spawn_mobs()
+		if spawn_mobs_enabled:
+			_spawn_mobs()
 		_built = true
 
 
@@ -122,7 +132,10 @@ func remove_player(peer_id: int, announce: bool = true) -> void:
 	cooldowns.erase(peer_id)
 	respawn_at.erase(peer_id)
 	if announce:
-		Net.s2c_despawn_entity.rpc(peer_id)
+		# Defer to the next tick (see _pending_despawn): by then every pending
+		# peer_disconnected has been processed, so player_peers() holds only
+		# peers that can actually receive packets.
+		_pending_despawn.append(peer_id)
 
 
 func player_peers() -> Array:
@@ -162,6 +175,7 @@ func _physics_process(delta: float) -> void:
 		cooldowns[id] = max(0.0, float(cooldowns[id]) - delta)
 	_step_players(delta)
 	_step_mobs(delta)
+	_flush_despawns()
 	_broadcast()
 
 
@@ -290,6 +304,26 @@ func save_all() -> void:
 
 
 # --- broadcast --------------------------------------------------------------
+
+func _flush_despawns() -> void:
+	if _pending_despawn.is_empty():
+		return
+	if multiplayer.multiplayer_peer == null:
+		_pending_despawn.clear()
+		return
+	var peers := player_peers()
+	for id: int in _pending_despawn:
+		# A player removed and re-added before this tick (a repeat select) is live
+		# again and its spawn already went out, so a despawn now would erase it on
+		# every client. Never despawn a live entity, and never send a peer its own
+		# despawn.
+		if entities.has(id):
+			continue
+		for peer: int in peers:
+			if peer != id:
+				Net.s2c_despawn_entity.rpc_id(peer, id)
+	_pending_despawn.clear()
+
 
 func _broadcast() -> void:
 	if multiplayer.multiplayer_peer == null:

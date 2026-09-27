@@ -30,6 +30,8 @@ var bot_mode := false
 var bot_user := ""
 var bot_require_peer := false
 var bot_check_respawn := false
+var bot_multiplayer := false
+var bot_seconds := 0.0
 
 var _yaw := 0.0
 var _pitch := -0.25
@@ -62,8 +64,10 @@ func _ready() -> void:
 		bot.net = net
 		bot.host = host
 		bot.username = bot_user
-		bot.require_remote = bot_require_peer
+		bot.require_remote = bot_require_peer or bot_multiplayer
 		bot.require_respawn = bot_check_respawn
+		bot.multiplayer_only = bot_multiplayer
+		bot.run_seconds = bot_seconds
 		add_child(bot)
 		print("[client] headless bot mode -> %s:%d" % [host, Protocol.SERVER_PORT])
 		return
@@ -100,6 +104,12 @@ func _parse_args() -> void:
 			bot_require_peer = true
 		elif arg == "--bot-check-respawn":
 			bot_check_respawn = true
+		elif arg == "--bot-multiplayer":
+			bot_multiplayer = true
+		elif arg == "--bot-seconds":
+			if i + 1 < args.size():
+				i += 1
+				bot_seconds = maxf(0.0, float(args[i]))
 		elif arg.begins_with("--host="):
 			host = arg.substr("--host=".length())
 		i += 1

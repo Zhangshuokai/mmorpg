@@ -57,6 +57,9 @@ func _ready() -> void:
 	combat.world = world
 	add_child(combat)
 
+	if _user_args_has("--no-mobs"):
+		world.spawn_mobs_enabled = false
+		print("[server] --no-mobs: enemy spawning disabled (multiplayer debug mode)")
 	world.setup(persistence)
 
 	Net.input_received.connect(_on_input)
@@ -77,6 +80,10 @@ func _ready() -> void:
 
 func _is_server_mode() -> bool:
 	return DisplayServer.get_name() == "headless" or OS.get_cmdline_user_args().has("--server")
+
+
+func _user_args_has(flag: String) -> bool:
+	return OS.get_cmdline_user_args().has(flag)
 
 
 # --- networking -------------------------------------------------------------

@@ -22,6 +22,16 @@ var require_remote := false
 ## When true the run also waits for a killed mob to respawn (acceptance: the
 ## death/respawn loop is closed on the server).
 var require_respawn := false
+## Enemy-free multiplayer debug mode: the bot only walks in its own direction and
+## the run asserts the player<->player replication chain (no combat involved).
+## Meant to run against a server started with --no-mobs.
+var multiplayer_only := false
+## When > 0 the bot does not exit as soon as the checks pass; it stays in the
+## world roaming for this many seconds (for manual, visible multi-user play).
+var run_seconds := 0.0
+
+var _wander_yaw := 0.0
+var _wander_timer := 0.0
 
 var _phase := "connect"
 var _elapsed := 0.0
@@ -62,6 +72,11 @@ func _ready() -> void:
 	if char_name.is_empty():
 		char_name = "Bot%d" % (absi(username.hash()) % 100000)
 	password = "botpass123"
+	# Fan the bots out: a stable per-user heading so no two random users walk the
+	# exact same line and remote movement is unambiguous.
+	_wander_yaw = float(absi(username.hash()) % 628) / 100.0
+
+	print("[bot] mode=%s" % ("multiplayer-only" if multiplayer_only else "combat"))
 
 	Net.login_result_received.connect(_on_login_result)
 	Net.character_list_received.connect(_on_character_list)
@@ -206,31 +221,48 @@ func _process(delta: float) -> void:
 	if _done:
 		return
 	_elapsed += delta
-	if _elapsed > OVERALL_TIMEOUT_SEC:
+	var overall := OVERALL_TIMEOUT_SEC if run_seconds <= 0.0 else run_seconds + 60.0
+	if _elapsed > overall:
 		_fail("overall timeout in phase '%s'" % _phase)
 		return
 	if _phase != "play":
 		return
 
 	_play_elapsed += delta
-	if _play_elapsed > PLAY_TIMEOUT_SEC:
+	if run_seconds > 0.0:
+		if _play_elapsed >= run_seconds:
+			_finish()
+			return
+	elif _play_elapsed > PLAY_TIMEOUT_SEC:
 		_fail("play phase timeout")
 		return
 
-	var target_id := _nearest_living_mob()
+	var target_id := 0
 	var move := Vector2.ZERO
 	var yaw := 0.0
 	var distance := 0.0
-	if target_id != 0:
-		var mob: Dictionary = _mobs[target_id]
-		var mob_pos: Vector3 = mob.get("pos", Vector3.ZERO)
-		var to_mob := mob_pos - _self_pos
-		to_mob.y = 0.0
-		distance = to_mob.length()
-		if distance > 0.01:
-			yaw = atan2(-to_mob.x, -to_mob.z)
-		if distance > Protocol.MELEE_RANGE * 0.75:
-			move = Vector2(0.0, 1.0)
+	if multiplayer_only:
+		# No enemies exist: roam so the server keeps this player moving. Re-steer
+		# periodically so it neither wedges against the map edge or a cover nor
+		# walks in lockstep with the other users.
+		_wander_timer -= delta
+		if _wander_timer <= 0.0:
+			_wander_timer = 4.0 + float(randi() % 400) / 100.0
+			_wander_yaw = randf() * TAU
+		move = Vector2(0.0, 1.0)
+		yaw = _wander_yaw
+	else:
+		target_id = _nearest_living_mob()
+		if target_id != 0:
+			var mob: Dictionary = _mobs[target_id]
+			var mob_pos: Vector3 = mob.get("pos", Vector3.ZERO)
+			var to_mob := mob_pos - _self_pos
+			to_mob.y = 0.0
+			distance = to_mob.length()
+			if distance > 0.01:
+				yaw = atan2(-to_mob.x, -to_mob.z)
+			if distance > Protocol.MELEE_RANGE * 0.75:
+				move = Vector2(0.0, 1.0)
 
 	_send_accum += delta
 	if _send_accum >= Protocol.TICK_DT:
@@ -239,11 +271,11 @@ func _process(delta: float) -> void:
 		net.send_input(_seq, move, yaw, 0)
 
 	_attack_accum += delta
-	if target_id != 0 and distance <= Protocol.MELEE_RANGE and _attack_accum >= ATTACK_INTERVAL_SEC:
+	if not multiplayer_only and target_id != 0 and distance <= Protocol.MELEE_RANGE and _attack_accum >= ATTACK_INTERVAL_SEC:
 		_attack_accum = 0.0
 		net.use_ability(target_id)
 
-	if _all_checks_pass():
+	if run_seconds <= 0.0 and _all_checks_pass():
 		_finish()
 
 
@@ -266,6 +298,9 @@ func _all_checks_pass() -> bool:
 	var remote_ok := (not require_remote) or _remote_travel >= MOVE_EPSILON
 	var respawn_ok := (not require_respawn) or _respawn_seen
 	var self_ok := _self_hp > 0 and _self_max_hp == Protocol.PLAYER_MAX_HP
+	if multiplayer_only:
+		return _login_ok and _list_received and _enter_world \
+			and _moved >= MOVE_EPSILON and _ticks > 0 and remote_ok and self_ok
 	return _login_ok and _list_received and _enter_world \
 		and _moved >= MOVE_EPSILON and _combat_seen and _kill_seen \
 		and remote_ok and respawn_ok and self_ok
@@ -295,8 +330,12 @@ func _report() -> void:
 	_check_optional("local_name", not _self_name.is_empty(), _self_name)
 	_check("movement", _moved >= MOVE_EPSILON, "moved %.2fm" % _moved)
 	_check("world_state_ticks", _ticks > 0, "%d ticks" % _ticks)
-	_check("combat_event", _combat_seen, "dealt %d damage" % _damage_dealt)
-	_check("mob_kill", _kill_seen)
+	if multiplayer_only:
+		_check_optional("combat_event", _combat_seen, "dealt %d damage" % _damage_dealt)
+		_check_optional("mob_kill", _kill_seen)
+	else:
+		_check("combat_event", _combat_seen, "dealt %d damage" % _damage_dealt)
+		_check("mob_kill", _kill_seen)
 	if require_respawn:
 		_check("mob_respawn", _respawn_seen)
 	else:
