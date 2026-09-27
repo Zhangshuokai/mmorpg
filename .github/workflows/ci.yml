@@ -1,0 +1,84 @@
+name: CI
+
+# S-O-1: runs the exact same pipeline as scripts/ci.ps1 - contract verify ->
+# parse checks -> GDScript unit tests -> headless bot (isolated port/DB) ->
+# Linux server + Windows client export. The engine path is supplied through the
+# GODOT env var; nothing in the repo hardcodes a machine path.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.7.1-stable"
+  GODOT_EXE: ${{ github.workspace }}\godot\Godot_v4.7.1-stable_win64_console.exe
+
+jobs:
+  pipeline:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The editor zip and the ~1.2GB export templates are cached by version;
+      # first run downloads them, later runs are fast.
+      - name: Cache Godot engine and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            godot
+            godot_export_templates.tpz
+          key: godot-${{ env.GODOT_VERSION }}-win64
+
+      - name: Install Godot editor
+        shell: pwsh
+        run: |
+          if (-not (Test-Path $env:GODOT_EXE)) {
+            New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\godot" | Out-Null
+            $zip = Join-Path $env:RUNNER_TEMP "godot.zip"
+            $url = "https://github.com/godotengine/godot/releases/download/$($env:GODOT_VERSION)/Godot_v$($env:GODOT_VERSION)_win64.zip"
+            Write-Host "Downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile $zip
+            Expand-Archive -Path $zip -DestinationPath "$env:GITHUB_WORKSPACE\godot" -Force
+          }
+          & $env:GODOT_EXE --version
+
+      - name: Install export templates
+        shell: pwsh
+        run: |
+          # Export template directory uses dots: "4.7.1.stable".
+          $templateDir = Join-Path $env:APPDATA ("Godot\export_templates\" + ($env:GODOT_VERSION -replace '-stable$', '.stable'))
+          if (-not (Test-Path (Join-Path $templateDir 'version.txt'))) {
+            $tpz = "$env:GITHUB_WORKSPACE\godot_export_templates.tpz"
+            if (-not (Test-Path $tpz)) {
+              $url = "https://github.com/godotengine/godot/releases/download/$($env:GODOT_VERSION)/Godot_v$($env:GODOT_VERSION)_export_templates.tpz"
+              Write-Host "Downloading $url"
+              Invoke-WebRequest -Uri $url -OutFile $tpz
+            }
+            $tmp = Join-Path $env:RUNNER_TEMP "templates"
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
+            Expand-Archive -Path $tpz -DestinationPath $tmp -Force
+            New-Item -ItemType Directory -Force -Path $templateDir | Out-Null
+            Copy-Item -Path (Join-Path $tmp 'templates\*') -Destination $templateDir -Recurse -Force
+          }
+          Get-ChildItem -LiteralPath $templateDir | Select-Object -ExpandProperty Name
+
+      - name: Run one-command pipeline (ci.ps1)
+        shell: pwsh
+        run: |
+          $env:GODOT = $env:GODOT_EXE
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmorpg-builds
+          path: |
+            server/build/mmorpg_server.x86_64
+            server/build/mmorpg_server.pck
+            server/build/libgdsqlite.linux.template_release.x86_64.so
+            client/build/mmorpg_client.exe
+            client/build/mmorpg_client.pck
+          if-no-files-found: warn

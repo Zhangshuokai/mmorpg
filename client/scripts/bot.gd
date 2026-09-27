@@ -13,6 +13,10 @@ const OVERALL_TIMEOUT_SEC := 90.0
 const PLAY_TIMEOUT_SEC := 45.0
 const ATTACK_INTERVAL_SEC := 1.05
 
+## Registry directory and the base-only file that must never be instantiated.
+const BOT_CHECKS_DIR := "res://scripts/bot_checks"
+const BOT_CHECK_BASE_FILE := "bot_check.gd"
+
 var net: NetworkClient
 var host := Protocol.DEFAULT_HOST
 var port := Protocol.SERVER_PORT
@@ -97,31 +101,41 @@ func _ready() -> void:
 
 
 ## Discovers every BotCheck module so a workbench can add assertions by dropping
-## a file into res://scripts/bot_checks without touching this runner.
+## a `bot_check_<domain>.gd` file into res://scripts/bot_checks without touching
+## this runner. Modules are loaded in sorted filename order; the reported order
+## is decided by each result's "order" field (see bot_check.gd).
+##
+## Only `.gd` files that are not the base `bot_check.gd` are considered. A module
+## that fails to load or does not extend BotCheck is reported and skipped rather
+## than silently ignored, so a typo never turns into a missing assertion.
 func _load_checks() -> void:
 	_checks.clear()
-	var dir := DirAccess.open("res://scripts/bot_checks")
+	var dir := DirAccess.open(BOT_CHECKS_DIR)
 	if dir == null:
-		push_warning("[bot] bot_checks directory missing; no assertions loaded")
+		push_warning("[bot] %s missing; no assertions loaded" % BOT_CHECKS_DIR)
 		return
 	var paths: Array[String] = []
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
 		if not dir.current_is_dir() and file_name.ends_with(".gd") \
-				and file_name != "bot_check.gd":
-			paths.append("res://scripts/bot_checks/".path_join(file_name))
+				and file_name != BOT_CHECK_BASE_FILE:
+			paths.append(BOT_CHECKS_DIR.path_join(file_name))
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	paths.sort()
 	for path in paths:
 		var script: GDScript = load(path)
 		if script == null:
+			push_warning("[bot] could not load check module %s; skipped" % path)
 			continue
 		var check: Variant = script.new()
 		if check is BotCheck:
 			(check as BotCheck).bot = self
 			_checks.append(check)
+		else:
+			push_warning("[bot] %s does not extend BotCheck; skipped" % path)
+	print("[bot] registered %d check module(s)" % _checks.size())
 
 
 func _try_login() -> void:
