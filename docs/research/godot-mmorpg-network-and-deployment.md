@@ -3,6 +3,9 @@
 - 调研日期：2026-09-27
 - 检索关键词：`godot 4 mmorpg dedicated server`、`godot high level multiplayer rpc`、`godot dedicated server docker deployment`、`nakama godot 4 client`、`godot user:// res:// data paths`、`godot 版本控制 .godot 忽略`
 - 用途：为类《魔兽世界》MMORPG 项目确定联网架构与专用服务器部署方案。以下为已核实来源的要点摘录，未核实的内容不收录。
+- **状态**：本文件是**调研事实归档**（不是计划书）。文中的方案已按 `AGENTS.md` 的架构决策落地到
+  `server/`（权威世界/鉴权/存档）、`client/`（输入上传/插值渲染）与 `shared/`（RPC 契约）；
+  实现现状与命令见根 `AGENTS.md`，未来规划见 `docs/roadmap.md`。
 
 ## 来源清单
 
@@ -29,7 +32,10 @@
 - 用 `@rpc` 注解声明；调用 `rpc()` 广播或 `rpc_id()` 指定。
 - 函数必须**在客户端与服务端脚本中都存在**，且 **NodePath 与签名（`@rpc` 声明、函数名、返回类型、节点路径）一致**；签名不符时报错信息可能指向无关 RPC。
 - 同一脚本内**所有** RPC 一起做校验，**即使当前未使用也必须两边都声明**。
-- 常用参数组合：`@rpc("authority", "call_remote", "reliable", 0)`；客户端上传输入用 `("any_peer", "call_local", "reliable")`。
+- 常用参数组合：`@rpc("authority", "call_remote", "reliable", 0)`（服务端下发权威状态）；
+  客户端上传输入用 `("any_peer", ..., "unreliable_ordered")`。
+  本仓库固定用 `"call_remote"` 而非文档示例里的 `"call_local"`——因为服务端**不兼任玩家**，
+  RPC 不需要在本地也执行一次；输入用 `unreliable_ordered` 而非 `reliable`（每 20Hz 覆盖，不需要重传）。
 - 传输模式：`unreliable`（可丢、乱序）、`unreliable_ordered`、`reliable`（有性能代价）。可用 channel 隔离聊天与玩法消息。
 - 只有在 `Node` 派生类上才能用高层 RPC；`Resource` 等非 Node 类会运行时报错。
 
