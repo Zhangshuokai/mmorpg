@@ -108,6 +108,19 @@ func player_peers() -> Array:
 	return _state.player_peers()
 
 
+# --- zones (WB5, S-N-7) -----------------------------------------------------
+
+## Shard key (zone/channel/instance) of an entity; default shard when untagged.
+func shard_for(id: int) -> Vector3i:
+	return _state.shard_for(id)
+
+
+## Moves an existing player to another shard without reconnecting; delegates the
+## replication transition to WorldSync.
+func move_player_shard(peer_id: int, shard: Vector3i, spawn: Vector3) -> bool:
+	return _sync.move_player_shard(peer_id, shard, spawn)
+
+
 func set_input(peer_id: int, seq: int, move: Vector2, yaw: float, buttons: int) -> void:
 	_state.set_input(peer_id, seq, move, yaw, buttons)
 

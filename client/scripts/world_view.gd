@@ -18,6 +18,10 @@ var local_view: EntityView = null
 var local_id: int = 0
 var target_id: int = 0
 var in_world := false
+## Current shard (WB5): zone + channel/instance the replicated entity table is
+## scoped to. Updated by the server's s2c_zone_changed.
+var local_zone := Protocol.ZONE_DEFAULT
+var local_channel := Protocol.CHANNEL_DEFAULT
 
 ## The local player's node is driven by prediction (WB6), not by interpolating
 ## the authoritative stream; discovered lazily because setup() runs before this
@@ -32,6 +36,8 @@ func setup(p_world_root: Node3D, p_rig: CameraRig) -> void:
 
 func _ready() -> void:
 	_net = get_parent().get_node_or_null("NetworkClient") as NetworkClient
+	if not Net.zone_changed.is_connected(on_zone_changed):
+		Net.zone_changed.connect(on_zone_changed)
 
 
 ## Local prediction is applied at input time; mirror it onto the EntityView every
@@ -51,6 +57,32 @@ func enter_world(self_id: int, spawn: Vector3, _hp: int) -> void:
 	in_world = true
 	if local_view != null:
 		local_view.global_position = spawn
+		rig.follow_target = local_view
+
+
+## WB5 (S-N-7): the server moved this client to another zone/channel/instance
+## without reconnecting. Drop every entity of the old shard immediately (the
+## server also sends despawns, but clearing here guarantees no stale entity
+## survives a dropped packet while keeping the local player and its prediction
+## alive), then re-base the local player on the new shard's spawn. The server
+## follows up with s2c_spawn_entity for the new shard.
+func on_zone_changed(zone_id: int, channel_id: int, spawn: Vector3) -> void:
+	local_zone = zone_id
+	local_channel = channel_id
+	var stale: Array = []
+	for id: int in entities.keys():
+		if id != local_id:
+			stale.append(id)
+	for id: int in stale:
+		var view := entities.get(id) as EntityView
+		if view != null:
+			view.queue_free()
+		entities.erase(id)
+	if target_id != local_id:
+		target_id = 0
+	if local_view != null and is_instance_valid(local_view):
+		local_view.set_predicted_position(spawn)
+		local_view.set_predicted_yaw(0.0)
 		rig.follow_target = local_view
 
 
@@ -117,6 +149,8 @@ func reset() -> void:
 	local_id = 0
 	target_id = 0
 	in_world = false
+	local_zone = Protocol.ZONE_DEFAULT
+	local_channel = Protocol.CHANNEL_DEFAULT
 	if rig != null:
 		rig.follow_target = null
 

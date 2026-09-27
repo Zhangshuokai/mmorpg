@@ -19,6 +19,11 @@ var cooldowns: Dictionary = {}
 var respawn_at: Dictionary = {}
 ## mob id -> unix msec of the next melee swing.
 var mob_next_attack: Dictionary = {}
+## WB5 (S-N-7) zone grouping: entity id -> shard key Vector3i(zone, channel,
+## instance). An id with no entry belongs to the default shard, so the single
+## world of the MVP keeps working unchanged. This is only an index: `entities`
+## stays the one authoritative id -> EntityState map the subsystems iterate.
+var shard_of: Dictionary = {}
 ## Entity ids whose despawn still has to be broadcast, flushed on the next tick.
 ##
 ## Sending them inline from the peer_disconnected callback races ENet's teardown:
@@ -61,6 +66,7 @@ func remove_entity(peer_id: int, announce: bool) -> void:
 	sessions.erase(peer_id)
 	cooldowns.erase(peer_id)
 	respawn_at.erase(peer_id)
+	shard_of.erase(peer_id)
 	if announce:
 		pending_despawn.append(peer_id)
 
@@ -71,4 +77,50 @@ func player_peers() -> Array:
 		var e: EntityState = entities[id]
 		if e.kind == Protocol.EntityKind.PLAYER:
 			out.append(id)
+	return out
+
+
+# --- zone grouping (WB5, S-N-7) ---------------------------------------------
+
+## The shard every entity belongs to until it is explicitly moved: the single
+## default zone/channel with no instance. Keeps the MVP world (and every bot
+## check) byte-for-byte unchanged.
+static func default_shard() -> Vector3i:
+	return Vector3i(Protocol.ZONE_DEFAULT, Protocol.CHANNEL_DEFAULT, 0)
+
+
+## Re-tags an existing entity. No-op for an unknown id (never invents entities).
+func set_shard(id: int, shard: Vector3i) -> void:
+	if entities.has(id):
+		shard_of[id] = shard
+
+
+## Shard of an entity; an untagged entity is in the default shard.
+func shard_for(id: int) -> Vector3i:
+	return shard_of.get(id, default_shard())
+
+
+## True when two entities share the same zone/channel/instance, i.e. may see and
+## interact with each other.
+func same_shard(a: int, b: int) -> bool:
+	return shard_for(a) == shard_for(b)
+
+
+## Players currently in `shard` (used by the zone service and for tests).
+func peers_in_shard(shard: Vector3i) -> Array:
+	var out: Array = []
+	for id: int in entities.keys():
+		var e: EntityState = entities[id]
+		if e.kind == Protocol.EntityKind.PLAYER and shard_for(id) == shard:
+			out.append(id)
+	return out
+
+
+## Distinct shards that currently hold at least one entity.
+func active_shards() -> Array:
+	var out: Array = []
+	for id: int in entities.keys():
+		var shard: Vector3i = shard_for(id)
+		if not out.has(shard):
+			out.append(shard)
 	return out

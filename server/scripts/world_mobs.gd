@@ -41,7 +41,7 @@ func step(delta: float) -> void:
 			if now >= int(state.respawn_at.get(id, 0)):
 				sync.respawn_mob(e)
 			continue
-		var target := nearest_living_player(e.pos)
+		var target := nearest_living_player(e)
 		if target == null:
 			continue
 		var to := target.pos - e.pos
@@ -57,14 +57,18 @@ func step(delta: float) -> void:
 			sync.apply_damage(target.id, Protocol.MOB_DAMAGE, id)
 
 
-func nearest_living_player(from: Vector3) -> EntityState:
+## WB5 (S-N-7): `mob` is passed in so aggro is scoped to the mob's own shard - a
+## mob in channel 0 must never chase (and invisibly damage) a player in channel 1.
+func nearest_living_player(mob: EntityState) -> EntityState:
 	var best: EntityState = null
 	var best_dist := Protocol.MOB_AGGRO_RANGE
 	for id: int in state.entities.keys():
 		var e: EntityState = state.entities[id]
 		if e.kind != Protocol.EntityKind.PLAYER or not e.alive:
 			continue
-		var d := from.distance_to(e.pos)
+		if not state.same_shard(mob.id, id):
+			continue
+		var d := mob.pos.distance_to(e.pos)
 		if d < best_dist:
 			best_dist = d
 			best = e
