@@ -1,0 +1,33 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="MMORPG Server"
+config/description="Server-authoritative dedicated MMORPG server (headless)."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7")
+run/flush_stdout_on_print=true
+boot_splash/show_image=false
+
+[autoload]
+
+Net="*res://shared/net/net_rpc.gd"
+
+[physics]
+
+; Editor default only: the server overrides this at startup from
+; Protocol.TICK_HZ, which is the single source of truth for the world tick.
+common/physics_ticks_per_second=20
+common/physics_jitter_fix=0.0
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
