@@ -9,6 +9,13 @@ extends RefCounted
 ## until a hysteresis margin, and the per-tick state packet is capped by
 ## BroadcastScheduler at Protocol.PACKET_BUDGET_BYTES.
 ##
+## WB5 (S-N-7): AoI is additionally scoped to WorldState shards
+## (zone/channel/instance), so entities in a different shard are never spawned or
+## broadcast even when they share world coordinates. move_player_shard performs
+## the replication transition of a zone/channel switch: it despawns the old
+## shard's entities to the mover, retags and re-bases it, and spawns the new
+## shard's entities (no reconnect, no new peer id).
+##
 ## Positions are read straight from the authoritative EntityState that
 ## WorldMovement/WorldMobs already produced; this class never integrates
 ## movement.
@@ -67,17 +74,23 @@ func add_player(peer_id: int, sheet: CharacterSheet) -> void:
 
 	_grid.rebuild(state.entities)
 
-	# The newcomer is told about itself and about everything already in its AoI.
+	# The newcomer is told about itself and about everything already in its AoI
+	# *within its own shard* (WB5): a player entering channel 0 must not be handed
+	# an entity that belongs to channel 1.
+	var shard: Vector3i = state.shard_for(peer_id)
 	Net.s2c_enter_world.rpc_id(peer_id, peer_id, player.pos, player.hp)
 	var visible: Dictionary = {}
 	for id: int in _grid.query_circle(player.pos, AOI_RADIUS):
+		if state.shard_for(id) != shard:
+			continue
 		Net.s2c_spawn_entity.rpc_id(peer_id, state.entities[id].to_spawn_dict())
 		visible[id] = true
 	_visible[peer_id] = visible
 
-	# Everybody already close enough is told about the newcomer.
+	# Everybody already close enough *in the same shard* is told about the
+	# newcomer.
 	for peer: int in state.player_peers():
-		if peer == peer_id:
+		if peer == peer_id or state.shard_for(peer) != shard:
 			continue
 		var other: EntityState = state.entities[peer]
 		if _horizontal_distance(other.pos, player.pos) <= AOI_RADIUS:
@@ -95,6 +108,80 @@ func remove_player(peer_id: int, announce: bool = true) -> void:
 	if not state.entities.has(peer_id):
 		return
 	state.remove_entity(peer_id, announce)
+
+
+## WB5 (S-N-7): moves an existing player to another zone/channel/instance shard
+## without reconnecting. The entity keeps its id; only its shard tag, position
+## and input stream are reset.
+##
+## Replication transition, in order:
+##   1. despawn every entity currently visible to the mover (the old shard);
+##   2. retag + re-base the mover and clear its (now meaningless) input/cooldown
+##      state so a stale pre-switch input cannot drag it off the spawn;
+##   3. despawn the mover on old-shard viewers;
+##   4. spawn the new shard's visible set (including the mover itself, which is
+##      what re-bases client prediction on the new spawn);
+##   5. spawn the mover on new-shard viewers.
+func move_player_shard(peer_id: int, shard: Vector3i, spawn: Vector3) -> bool:
+	if not state.entities.has(peer_id):
+		return false
+	var entity: EntityState = state.entities[peer_id]
+	if entity.kind != Protocol.EntityKind.PLAYER:
+		return false
+
+	# 1) old shard, as seen by the mover.
+	var visible: Dictionary = _visible.get(peer_id, {})
+	for id: int in visible.keys():
+		if id == peer_id:
+			continue
+		Net.s2c_despawn_entity.rpc_id(peer_id, id)
+		_scheduler.forget(peer_id, id)
+	_visible[peer_id] = {peer_id: true}
+
+	# 2) retag + re-base. Input is dropped (its seq belongs to the old shard's
+	# stream) but hp/alive and cooldowns are preserved: a channel switch must not
+	# heal, revive or reset an ability cooldown.
+	state.set_shard(peer_id, shard)
+	entity.pos = spawn
+	entity.yaw = 0.0
+	entity.target_id = 0
+	state.inputs[peer_id] = {"seq": -1, "move": Vector2.ZERO, "yaw": 0.0, "buttons": 0}
+	var sheet: CharacterSheet = state.sessions.get(peer_id)
+	if sheet != null:
+		sheet.pos = spawn
+
+	# 3) old-shard viewers lose the mover.
+	for peer: int in state.player_peers():
+		if peer == peer_id or state.shard_for(peer) == shard:
+			continue
+		var other: Dictionary = _visible.get(peer, {})
+		if other.has(peer_id):
+			Net.s2c_despawn_entity.rpc_id(peer, peer_id)
+			other.erase(peer_id)
+			_scheduler.forget(peer, peer_id)
+
+	# 4) new shard, as seen by the mover (self included).
+	_grid.rebuild(state.entities)
+	var fresh: Dictionary = {peer_id: true}
+	for id: int in _grid.query_circle(spawn, AOI_RADIUS):
+		if state.shard_for(id) != shard:
+			continue
+		Net.s2c_spawn_entity.rpc_id(peer_id, state.entities[id].to_spawn_dict())
+		fresh[id] = true
+	_visible[peer_id] = fresh
+
+	# 5) new-shard viewers discover the mover.
+	for peer: int in state.player_peers():
+		if peer == peer_id or state.shard_for(peer) != shard:
+			continue
+		if _horizontal_distance(state.entities[peer].pos, spawn) <= AOI_RADIUS:
+			if not _visible.has(peer):
+				_visible[peer] = {}
+			_visible[peer][peer_id] = true
+			Net.s2c_spawn_entity.rpc_id(peer, entity.to_spawn_dict())
+
+	print("[world] peer %d switched to shard %s" % [peer_id, str(shard)])
+	return true
 
 
 # --- damage / death / respawn ----------------------------------------------
@@ -199,9 +286,13 @@ func _update_visibility(peer_id: int) -> void:
 	var visible: Dictionary = _visible.get(peer_id, {})
 	visible[peer_id] = true
 
+	# WB5: AoI membership is shard-scoped. The grid still indexes every entity
+	# (it is a pure spatial index); entities outside the viewer's shard are
+	# filtered out here so they are never spawned or broadcast.
+	var viewer_shard: Vector3i = state.shard_for(peer_id)
 	var in_range: Dictionary = {}
 	for id: int in _grid.query_circle(viewer.pos, AOI_RADIUS):
-		if state.entities.has(id):
+		if state.entities.has(id) and state.shard_for(id) == viewer_shard:
 			in_range[id] = true
 
 	# Leaving the AoI (past the keep hysteresis) -> despawn.

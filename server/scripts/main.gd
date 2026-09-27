@@ -14,6 +14,7 @@ var combat: CombatService
 var router: IntentRouter
 var bootstrap: Bootstrap
 var session_flow: SessionFlow
+var zones: ZoneService
 
 ## Overridable via --port / --db (worktree isolation: one port + one DB each).
 var server_port := Protocol.SERVER_PORT
@@ -114,6 +115,16 @@ func _ready() -> void:
 		world.spawn_mobs_enabled = false
 		print("[server] --no-mobs: enemy spawning disabled (multiplayer debug mode)")
 	world.setup(persistence)
+
+	# WB5 (S-N-7): zones / channels / instances. The service retags and re-bases
+	# live players, so it is created after the world is built.
+	zones = ZoneService.new()
+	zones.name = "Zones"
+	zones.world = world
+	zones.persistence = persistence
+	zones.router = router
+	add_child(zones)
+	router.register("change_zone_requested", zones.on_change_zone)
 
 	_save_timer = Timer.new()
 	_save_timer.name = "SaveTimer"
