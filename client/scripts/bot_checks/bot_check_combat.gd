@@ -28,7 +28,6 @@ const ABILITY_INTERRUPT_PROBE := 13
 ## first mob, which is exactly what the server uses to break the cast.
 const PROBE_INTERRUPT_AT := 0.0
 const PROBE_COOLDOWN_AT := 0.30
-const PROBE_COOLDOWN_SECOND_AT := 0.45
 const PROBE_RANGE_AT := 0.70
 const PROBE_INVALID_AT := 0.90
 
@@ -122,7 +121,14 @@ func _tick_probes() -> void:
 		bot.net.use_ability(ABILITY_INTERRUPT_PROBE, target)
 	if elapsed >= PROBE_COOLDOWN_AT and _send_once("cooldown"):
 		bot.net.use_ability(ABILITY_COOLDOWN_PROBE, target)
-	if elapsed >= PROBE_COOLDOWN_SECOND_AT and _send_once("cooldown2"):
+	# Second use: sent only once the first cast has actually been observed, so it
+	# always lands while the 30s cooldown is active. A wall-clock resend is racy -
+	# a slow frame or a movement interrupt could let a timed resend slip through
+	# and make this required live probe flaky (the deterministic cooldown boundary
+	# is already covered by tests/combat_boundaries_test.gd).
+	if _sent.has("cooldown") and not _sent.has("cooldown2") \
+			and _count(_cast_started, ABILITY_COOLDOWN_PROBE) >= 1:
+		_sent["cooldown2"] = true
 		bot.net.use_ability(ABILITY_COOLDOWN_PROBE, target)
 	if elapsed >= PROBE_RANGE_AT and _send_once("range"):
 		bot.net.use_ability(ABILITY_RANGE_PROBE, target)
@@ -139,11 +145,17 @@ func _send_once(key: String) -> bool:
 
 # --- signals ----------------------------------------------------------------
 
-func _on_cast_started(_caster_id: int, ability_id: int, _target_id: int, _duration_sec: float) -> void:
+func _on_cast_started(caster_id: int, ability_id: int, _target_id: int, _duration_sec: float) -> void:
+	# Cast signals are replicated to every client in range: only the local
+	# player's own casts may count, otherwise a second bot's probes inflate ours.
+	if bot == null or caster_id != bot._self_id:
+		return
 	_cast_started[ability_id] = _count(_cast_started, ability_id) + 1
 
 
-func _on_cast_interrupted(_caster_id: int, ability_id: int, _reason: int) -> void:
+func _on_cast_interrupted(caster_id: int, ability_id: int, _reason: int) -> void:
+	if bot == null or caster_id != bot._self_id:
+		return
 	_cast_interrupted[ability_id] = _count(_cast_interrupted, ability_id) + 1
 
 
