@@ -13,8 +13,11 @@ workflow, so a normal CI run exercises it before the bot.
 ```powershell
 $env:GODOT = "D:\code\game\godot_engine\Godot_v4.7.1-stable_win64_console.exe"
 
-# Unit tests only (needs a prior --import of the server project):
-& $env:GODOT --headless --path server --script tests/run_tests.gd
+# Unit tests only (needs a prior --import of the server project). The runner is
+# loaded by an absolute path because tests/ lives at the repo root, outside the
+# server project; a relative `--script tests/run_tests.gd` would resolve to the
+# non-existent `res://tests/...` and fail.
+& $env:GODOT --headless --path server --script "<repo-root>\tests\run_tests.gd"
 
 # Everything (contract verify -> parse -> unit tests -> bot -> export):
 powershell -File scripts/ci.ps1
