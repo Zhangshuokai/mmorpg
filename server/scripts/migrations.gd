@@ -8,6 +8,11 @@ extends RefCounted
 ## current_version in order, recording each one. A failed migration refuses
 ## startup.
 ##
+## The whole chain runs inside one transaction: either every pending step lands
+## with its version row, or nothing does (SQLite DDL is transactional). A failure
+## therefore leaves the database exactly as it was and the server refuses to
+## start, so an operator can fix the data/code and retry with no partial schema.
+##
 ## Reserved sequence ranges (WB0 fixes these so parallel branches never collide):
 ##   0001        baseline (pre-WB0 schema snapshot, idempotent for existing DBs)
 ##   0002-0099   WB1 data / persistence / backup
@@ -16,7 +21,9 @@ extends RefCounted
 ##   0300-0399   WB5 zones / instances
 ##   0400+       other / unassigned
 ## Each workbench adds `m_<seq>_<slug>.gd`-style steps inside its own range and
-## appends them to `steps()` below. Never reorder or edit an applied step.
+## appends them to `steps()` below. Never reorder or edit an applied step: the
+## list is append-only, and `run()` refuses to start if it is not strictly
+## increasing.
 
 const SEQ_RANGES := {
 	"0001": "baseline",
@@ -28,35 +35,73 @@ const SEQ_RANGES := {
 }
 
 var db: DBService
+## Drill-only: when set to a migration seq, `run()` makes that step fail so the
+## gate can demonstrate "a failed migration refuses startup". Set from Bootstrap
+## via the server `--migrate-fail-at <seq>` user arg. Never set in production.
+var force_fail_at := -1
 
 
 ## Runs all pending migrations. Returns false if the schema could not be brought
 ## to the latest version (the caller must refuse to start).
 func run(p_db: DBService) -> bool:
 	db = p_db
-	if not _ensure_version_table():
+	if db == null or not db.is_open:
+		push_error("[migrations] database is not open; refusing to start")
 		return false
+	if not _steps_strictly_increasing():
+		push_error("[migrations] step sequence is not strictly increasing; refusing to start")
+		return false
+
+	if not db.begin_transaction():
+		push_error("[migrations] cannot begin migration transaction; refusing to start")
+		return false
+	if not _ensure_version_table():
+		db.rollback_transaction()
+		return false
+
 	var current := _current_version()
 	for step: Dictionary in steps():
 		var seq := int(step.get("seq", 0))
 		if seq <= current:
 			continue
 		var slug := String(step.get("slug", "?"))
+		if force_fail_at > 0 and seq == force_fail_at:
+			push_error("[migrations] %04d_%s forced failure (drill); refusing to start" % [seq, slug])
+			db.rollback_transaction()
+			return false
 		print("[migrations] applying %04d_%s" % [seq, slug])
 		var fn: Callable = step.get("fn")
 		if not fn.is_valid() or not bool(fn.call()):
-			push_error("[migrations] %04d_%s failed; refusing to start" % [seq, slug])
+			push_error("[migrations] %04d_%s failed; rolling back and refusing to start" % [seq, slug])
+			db.rollback_transaction()
 			return false
 		if not _set_version(seq):
+			push_error("[migrations] could not record version %d; refusing to start" % seq)
+			db.rollback_transaction()
 			return false
+
+	if not db.commit_transaction():
+		push_error("[migrations] cannot commit migration transaction; refusing to start")
+		db.rollback_transaction()
+		return false
 	print("[migrations] schema at version %d" % _current_version())
 	return true
+
+
+## Highest seq defined in `steps()`. Used by Bootstrap to decide whether an
+## existing database needs a pre-migration backup.
+func latest_seq() -> int:
+	var latest := 0
+	for step: Dictionary in steps():
+		latest = maxi(latest, int(step.get("seq", 0)))
+	return latest
 
 
 ## Ordered, append-only migration list.
 func steps() -> Array:
 	return [
 		{"seq": 1, "slug": "baseline", "fn": Callable(self, "_m_0001_baseline")},
+		{"seq": 2, "slug": "characters_account_index", "fn": Callable(self, "_m_0002_characters_account_index")},
 	]
 
 
@@ -101,6 +146,16 @@ func _m_0001_baseline() -> bool:
 	return ok
 
 
+## 0002 (WB1): index for the per-account character list. Additive and idempotent;
+## exercises the append-only chain for both a clean DB (0 -> 1 -> 2) and a
+## pre-WB0 DB that already has accounts/characters but no schema_version.
+func _m_0002_characters_account_index() -> bool:
+	var ok := db.execute("CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id);")
+	if not ok:
+		push_error("[migrations] create index failed: %s" % db.db.error_message)
+	return ok
+
+
 # --- version bookkeeping ----------------------------------------------------
 
 func _ensure_version_table() -> bool:
@@ -129,3 +184,15 @@ func _set_version(seq: int) -> bool:
 func _table_exists(table_name: String) -> bool:
 	var rows := db.select("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", [table_name])
 	return not rows.is_empty()
+
+
+## Append-only guard: a duplicate, out-of-order or empty step is a programming
+## error that would silently skip migrations, so it aborts startup instead.
+func _steps_strictly_increasing() -> bool:
+	var previous := 0
+	for step: Dictionary in steps():
+		var seq := int(step.get("seq", 0))
+		if seq <= previous:
+			return false
+		previous = seq
+	return true

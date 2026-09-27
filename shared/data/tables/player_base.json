@@ -1,0 +1,21 @@
+{
+  "table": "player_base",
+  "version": 1,
+  "comment": "WB1 static base stats for the single MVP class (S-D-3). WB2 extends this with classes.json/abilities.json; until then these mirror the legacy Protocol values so the migration is data-only and behaviour is unchanged.",
+  "values": {
+    "max_hp": 100,
+    "radius": 0.4,
+    "respawn_sec": 5.0,
+    "melee_range": 3.0,
+    "melee_damage": 20,
+    "melee_cooldown": 1.0
+  },
+  "fields": {
+    "max_hp": {"type": "int", "min": 1},
+    "radius": {"type": "number", "min": 0.0},
+    "respawn_sec": {"type": "number", "min": 0.0},
+    "melee_range": {"type": "number", "min": 0.0},
+    "melee_damage": {"type": "int", "min": 0},
+    "melee_cooldown": {"type": "number", "min": 0.0}
+  }
+}
