@@ -1,0 +1,86 @@
+{
+  "table": "items",
+  "version": 1,
+  "comment": "WB3 static item definitions (S-G-5). Values are data, not code: kind uses Protocol.ItemKind and equip_slot uses Protocol.EquipSlot. `max_stack` is bounded by Protocol.ITEM_STACK_MAX; `bind` is bind-on-pickup/on-equip; `stats` keys are the Protocol.Stat names. Runtime ownership (slots/equipment) lives in the DB, never here.",
+  "primary_key": "id",
+  "fields": {
+    "id": {"type": "string", "min_length": 1, "max_length": 64},
+    "name": {"type": "string", "min_length": 1, "max_length": 64},
+    "kind": {"type": "int", "enum": [1, 2, 3, 4]},
+    "rarity": {"type": "string", "enum": ["common", "uncommon", "rare", "epic", "legendary"]},
+    "max_stack": {"type": "int", "min": 1, "max": 999},
+    "bind": {"type": "bool"},
+    "equip_slot": {"type": "int", "enum": [0, 1, 2, 3, 4, 5], "nullable": true},
+    "stats": {
+      "type": "object",
+      "fields": {
+        "strength": {"type": "int", "min": -100, "max": 100, "required": false},
+        "agility": {"type": "int", "min": -100, "max": 100, "required": false},
+        "stamina": {"type": "int", "min": -100, "max": 100, "required": false},
+        "intellect": {"type": "int", "min": -100, "max": 100, "required": false}
+      }
+    }
+  },
+  "rows": [
+    {
+      "id": "worn_sword",
+      "name": "Worn Sword",
+      "kind": 1,
+      "rarity": "common",
+      "max_stack": 1,
+      "bind": false,
+      "equip_slot": 0,
+      "stats": {"strength": 2, "agility": 0, "stamina": 0, "intellect": 0}
+    },
+    {
+      "id": "leather_vest",
+      "name": "Leather Vest",
+      "kind": 2,
+      "rarity": "common",
+      "max_stack": 1,
+      "bind": true,
+      "equip_slot": 3,
+      "stats": {"strength": 0, "agility": 0, "stamina": 2, "intellect": 0}
+    },
+    {
+      "id": "iron_helm",
+      "name": "Iron Helm",
+      "kind": 2,
+      "rarity": "uncommon",
+      "max_stack": 1,
+      "bind": false,
+      "equip_slot": 2,
+      "stats": {"strength": 0, "agility": 0, "stamina": 1, "intellect": 0}
+    },
+    {
+      "id": "cloth_legs",
+      "name": "Cloth Legs",
+      "kind": 2,
+      "rarity": "common",
+      "max_stack": 1,
+      "bind": false,
+      "equip_slot": 4,
+      "stats": {"strength": 0, "agility": 0, "stamina": 0, "intellect": 1}
+    },
+    {
+      "id": "traveler_boots",
+      "name": "Traveler Boots",
+      "kind": 2,
+      "rarity": "common",
+      "max_stack": 1,
+      "bind": false,
+      "equip_slot": 5,
+      "stats": {"strength": 0, "agility": 1, "stamina": 0, "intellect": 0}
+    },
+    {
+      "id": "minor_healing_potion",
+      "name": "Minor Healing Potion",
+      "kind": 3,
+      "rarity": "common",
+      "max_stack": 20,
+      "bind": false,
+      "equip_slot": null,
+      "stats": {"strength": 0, "agility": 0, "stamina": 0, "intellect": 0}
+    }
+  ]
+}

@@ -102,6 +102,7 @@ func steps() -> Array:
 	return [
 		{"seq": 1, "slug": "baseline", "fn": Callable(self, "_m_0001_baseline")},
 		{"seq": 2, "slug": "characters_account_index", "fn": Callable(self, "_m_0002_characters_account_index")},
+		{"seq": 100, "slug": "wb3_inventory", "fn": Callable(self, "_m_0100_wb3_inventory")},
 	]
 
 
@@ -154,6 +155,43 @@ func _m_0002_characters_account_index() -> bool:
 	if not ok:
 		push_error("[migrations] create index failed: %s" % db.db.error_message)
 	return ok
+
+
+## 0100 (WB3): item/inventory tables (S-G-5). `character_inventory` is the
+## per-character anchor whose presence means "this character's starter kit was
+## already granted" - so an intentionally emptied inventory is never silently
+## re-granted. `inventory_items` and `character_equipment` store the owned stacks;
+## (character_id, slot) is unique so a slot can never hold two stacks. Raw DDL is
+## used because godot-sqlite's create_table cannot express a composite key.
+func _m_0100_wb3_inventory() -> bool:
+	var statements: Array[String] = [
+		"CREATE TABLE IF NOT EXISTS character_inventory ("
+		+ "character_id INTEGER PRIMARY KEY NOT NULL, "
+		+ "initialized INTEGER NOT NULL DEFAULT 0, "
+		+ "FOREIGN KEY(character_id) REFERENCES characters(id));",
+		"CREATE TABLE IF NOT EXISTS inventory_items ("
+		+ "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+		+ "character_id INTEGER NOT NULL, "
+		+ "slot INTEGER NOT NULL, "
+		+ "item_id TEXT NOT NULL, "
+		+ "stack INTEGER NOT NULL, "
+		+ "bound INTEGER NOT NULL DEFAULT 0, "
+		+ "UNIQUE(character_id, slot), "
+		+ "FOREIGN KEY(character_id) REFERENCES characters(id));",
+		"CREATE TABLE IF NOT EXISTS character_equipment ("
+		+ "character_id INTEGER NOT NULL, "
+		+ "slot INTEGER NOT NULL, "
+		+ "item_id TEXT NOT NULL, "
+		+ "stack INTEGER NOT NULL, "
+		+ "bound INTEGER NOT NULL DEFAULT 0, "
+		+ "PRIMARY KEY(character_id, slot), "
+		+ "FOREIGN KEY(character_id) REFERENCES characters(id));",
+	]
+	for sql: String in statements:
+		if not db.execute(sql):
+			push_error("[migrations] WB3 inventory DDL failed: %s" % db.db.error_message)
+			return false
+	return true
 
 
 # --- version bookkeeping ----------------------------------------------------
