@@ -1,0 +1,26 @@
+{
+  "table": "abilities",
+  "version": 1,
+  "comment": "WB2 ability registry (S-G-1, S-D-3). Row per ability; ids are stable ints and MUST match Protocol.AbilityId where a name already exists (0 = MELEE). Values live here, not in Protocol: target_type is a Protocol.TargetType id, school is a resistance school key from classes.json.resistances. cast_time 0 = instant (no cast bar); gcd 0 = off the global cooldown. Abilities 10-13 are the bot's boundary probes (cooldown/range/invalid-target/interrupt) and are also legitimate class abilities so the server resolves them through the exact same path as real spells.",
+  "primary_key": "id",
+  "fields": {
+    "id": {"type": "int", "min": 0},
+    "name": {"type": "string", "min_length": 1},
+    "class_ids": {"type": "array", "min_length": 1, "items": {"type": "int", "min": 0}},
+    "target_type": {"type": "int", "enum": [0, 1, 2, 3, 4]},
+    "range": {"type": "number", "min": 0.0, "max": 60.0},
+    "cooldown": {"type": "number", "min": 0.0, "max": 3600.0},
+    "gcd": {"type": "number", "min": 0.0, "max": 5.0},
+    "cast_time": {"type": "number", "min": 0.0, "max": 30.0},
+    "base_damage": {"type": "int", "min": 0},
+    "school": {"type": "string", "enum": ["physical", "fire", "frost", "arcane"]}
+  },
+  "rows": [
+    {"id": 0, "name": "Melee", "class_ids": [0], "target_type": 2, "range": 3.0, "cooldown": 1.0, "gcd": 0.0, "cast_time": 0.0, "base_damage": 20, "school": "physical"},
+    {"id": 1, "name": "Heroic Strike", "class_ids": [0], "target_type": 2, "range": 3.0, "cooldown": 4.0, "gcd": 1.0, "cast_time": 0.0, "base_damage": 30, "school": "physical"},
+    {"id": 10, "name": "Hamstring", "class_ids": [0], "target_type": 2, "range": 30.0, "cooldown": 30.0, "gcd": 0.0, "cast_time": 0.3, "base_damage": 5, "school": "physical"},
+    {"id": 11, "name": "Short Reach", "class_ids": [0], "target_type": 2, "range": 0.5, "cooldown": 0.0, "gcd": 0.0, "cast_time": 0.3, "base_damage": 5, "school": "physical"},
+    {"id": 12, "name": "Taunt", "class_ids": [0], "target_type": 2, "range": 30.0, "cooldown": 0.0, "gcd": 0.0, "cast_time": 0.3, "base_damage": 5, "school": "arcane"},
+    {"id": 13, "name": "Charge", "class_ids": [0], "target_type": 2, "range": 30.0, "cooldown": 0.0, "gcd": 0.0, "cast_time": 1.5, "base_damage": 5, "school": "physical"}
+  ]
+}
