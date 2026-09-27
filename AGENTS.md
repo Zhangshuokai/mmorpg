@@ -1,7 +1,8 @@
 # AGENTS.md
 
 目标：基于 **Godot 4** 的类《魔兽世界》MMORPG（大型多人在线、服务端权威）。
-当前状态：**MVP 骨架已落地**（双工程 + 共享契约 + 移动/战斗/登录存档闭环，全部本地验证通过）；
+当前状态：MVP 骨架 + **P0 系统已落地**（WB0 契约冻结/热点拆分 → Wave 1 数据迁移·备份、AoI/带宽、客户端预测、
+安全硬化、CI/单测 → Wave 2 技能/战斗数值、物品/背包、多区域/实例；全部本地验证通过）；
 后续规划见 `docs/roadmap.md`。
 
 ## 版本锁定（三者必须同时匹配）
@@ -34,11 +35,14 @@
     `sim/formulas.gd`（`Formulas` 战斗公式，当前平伤占位）、`data/data_tables.gd`（`DataTables` 表加载器 + 校验签名）、
     `data/tables/*.json`（每个 WB 只加自己的表文件，**没有共享清单**，避免合并冲突）。
 - `server/addons/godot-sqlite/`（约 300MB，多平台二进制）**必须提交**；客户端工程**没有** `addons/`，不要往里装。
-- `class_name` 作用域：`Protocol`/`EntityState`/`CharacterSheet`/`Movement`/`Formulas`/`DataTables` 两端都可见；
-  `DBService`/`AuthService`/`PersistenceService`/`WorldService`/`CombatService`/`WorldState`/`WorldMovement`/
-  `WorldMobs`/`WorldSync`/`Bootstrap`/`IntentRouter`/`SessionFlow`/`Migrations` 只在服务端工程注册；
-  客户端为 `NetworkClient`/`NetTransport`/`NetAuth`/`NetInput`/`WorldView`/`InputController`/`UIFlow`/`BotClient`/
-  `BotCheck*`/`LoginUI`/`HUD`/`CameraRig`/`EntityView`/`WorldVisuals`。客户端**不能**引用服务端 class_name。
+- `class_name` 作用域：`Protocol`/`EntityState`/`CharacterSheet`/`Movement`/`Formulas`/`DataTables`/`Item`/`Inventory` 两端都可见；
+  `DBService`/`AuthService`/`PersistenceService`/`WorldService`/`CombatService`/`SkillService`/`InventoryService`/
+  `PersistenceInventory`/`ZoneService`/`ZoneInstance`/`WorldState`/`WorldMovement`/`WorldMobs`/`WorldSync`/`Bootstrap`/
+  `IntentRouter`/`SessionFlow`/`Migrations`/`SpatialGrid`/`BroadcastScheduler`/`RateLimitService`/`AuthHandshake`
+  只在服务端工程注册；
+  客户端为 `NetworkClient`/`NetTransport`/`NetAuth`/`NetInput`/`Prediction`/`WorldView`/`InputController`/`UIFlow`/
+  `BotClient`/`BotCheck*`/`LoginUI`/`HUD`/`SkillBar`/`InventoryUI`/`CameraRig`/`EntityView`/`WorldVisuals`。
+  客户端**不能**引用服务端 class_name。
 - 文档分工：`docs/research/*` = 已核实的调研事实（不是计划书）；`docs/roadmap.md` = 未来展望/技术债。
 
 ## WB0 基线（P0 并行 workbench 的文件所有权地图）
