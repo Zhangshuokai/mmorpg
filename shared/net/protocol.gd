@@ -159,6 +159,8 @@ enum Msg {
 	INPUT_ACK,
 	INVENTORY,
 	ZONE_CHANGED,
+	CAST_STARTED,
+	CAST_INTERRUPTED,
 }
 
 ## The single source of truth for the wire contract: every RPC that must exist,
@@ -186,6 +188,8 @@ const RPC_NAMES: Array[String] = [
 	"s2c_input_ack",
 	"s2c_inventory",
 	"s2c_zone_changed",
+	"s2c_cast_started",
+	"s2c_cast_interrupted",
 ]
 
 # --- Auth payload keys (credentials travel via auth_callback, never via RPC) -

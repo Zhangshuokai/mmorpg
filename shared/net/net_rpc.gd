@@ -45,6 +45,11 @@ signal input_ack_received(seq: int)
 signal inventory_received(snapshot: Dictionary)
 ## Zone change confirmation (S-N-7).
 signal zone_changed(zone_id: int, channel_id: int, spawn: Vector3)
+## Cast bar support (S-G-1): a server-approved cast begins, and either it is
+## interrupted or it completes (completion shows up as the resulting
+## s2c_combat_event). `duration_sec` comes from the ability data table.
+signal cast_started(caster_id: int, ability_id: int, target_id: int, duration_sec: float)
+signal cast_interrupted(caster_id: int, ability_id: int, reason: int)
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
@@ -145,3 +150,13 @@ func s2c_inventory(snapshot: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s2c_zone_changed(zone_id: int, channel_id: int, spawn: Vector3) -> void:
 	zone_changed.emit(zone_id, channel_id, spawn)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s2c_cast_started(caster_id: int, ability_id: int, target_id: int, duration_sec: float) -> void:
+	cast_started.emit(caster_id, ability_id, target_id, duration_sec)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s2c_cast_interrupted(caster_id: int, ability_id: int, reason: int) -> void:
+	cast_interrupted.emit(caster_id, ability_id, reason)
