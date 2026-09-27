@@ -1,0 +1,38 @@
+{
+  "table": "classes",
+  "version": 1,
+  "comment": "WB2 class registry (S-G-2, S-D-3). Row per playable class; id 0 = Protocol.ClassId.WARRIOR. The combat stats here feed shared/sim/formulas.gd: armor and the per-school resistances reduce incoming damage, attack_power scales ability base_damage, crit_chance/hit_chance drive the deterministic crit/miss rolls. `abilities` is the class's known-ability list validated against abilities.json ids. WARRIOR keeps the frozen MVP parity (attack_power 0, armor 0, no crit, always hits) so the existing kill loop is unchanged; future classes just add rows here.",
+  "primary_key": "id",
+  "fields": {
+    "id": {"type": "int", "min": 0},
+    "name": {"type": "string", "min_length": 1},
+    "max_hp": {"type": "int", "min": 1},
+    "attack_power": {"type": "int", "min": 0},
+    "armor": {"type": "int", "min": 0},
+    "crit_chance": {"type": "number", "min": 0.0, "max": 1.0},
+    "hit_chance": {"type": "number", "min": 0.0, "max": 1.0},
+    "resistances": {
+      "type": "object",
+      "fields": {
+        "physical": {"type": "int", "min": 0},
+        "fire": {"type": "int", "min": 0},
+        "frost": {"type": "int", "min": 0},
+        "arcane": {"type": "int", "min": 0}
+      }
+    },
+    "abilities": {"type": "array", "min_length": 1, "items": {"type": "int", "min": 0}}
+  },
+  "rows": [
+    {
+      "id": 0,
+      "name": "Warrior",
+      "max_hp": 100,
+      "attack_power": 0,
+      "armor": 0,
+      "crit_chance": 0.0,
+      "hit_chance": 1.0,
+      "resistances": {"physical": 0, "fire": 0, "frost": 0, "arcane": 0},
+      "abilities": [0, 1, 10, 11, 12, 13]
+    }
+  ]
+}
