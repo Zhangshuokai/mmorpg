@@ -1,8 +1,8 @@
 class_name NetTransport
 extends Node
-## ENet connection lifecycle and connection failure reporting (WB0 split;
-## WB7 owns the security hardening of the handshake). Owns the peer, not the
-## intent payloads (see NetInput) nor the credential payload (see NetAuth).
+## ENet connection lifecycle and connection failure reporting (WB0 split; WB7
+## owns the security hardening of the handshake). Owns the peer, not the intent
+## payloads (see NetInput) nor the credential payload (see NetAuth).
 
 var host := Protocol.DEFAULT_HOST
 var port := Protocol.SERVER_PORT
@@ -21,6 +21,12 @@ func connect_to_server(p_host: String, username: String, password: String, regis
 	_auth.set_credentials(username, password, register)
 	close()
 
+	# The client must install a non-empty auth_callback before the ENet connection
+	# succeeds: SceneMultiplayer only emits `peer_authenticating` (and therefore
+	# only starts the challenge-response exchange) when one is set, and the same
+	# callback delivers the server's {nonce, salt} challenge.
+	multiplayer.auth_callback = Callable(_auth, "on_auth_message")
+
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(host, port)
 	if err != OK:
@@ -29,9 +35,6 @@ func connect_to_server(p_host: String, username: String, password: String, regis
 		return
 	multiplayer.multiplayer_peer = peer
 
-	# The client must also set an auth_callback, otherwise `peer_authenticating`
-	# never fires and no credentials could be sent.
-	multiplayer.auth_callback = func(_id: int, _data: PackedByteArray) -> void: pass
 	if not multiplayer.peer_authenticating.is_connected(_auth.on_peer_authenticating):
 		multiplayer.peer_authenticating.connect(_auth.on_peer_authenticating)
 	if not multiplayer.connection_failed.is_connected(_on_connection_failed):
