@@ -32,6 +32,11 @@ var obstacles: Array = []
 ## Unacked inputs, oldest first: {"seq": int, "move": Vector2, "yaw": float, "dt": float}.
 var pending: Array = []
 var sim_pos := Vector3.ZERO
+## Previous tick's simulated position. Prediction only advances once per server
+## tick (20Hz), so rendering interpolates `prev_sim_pos -> sim_pos` between ticks;
+## without it the local player (and, since the camera follows it, the whole scene)
+## visibly steps at 20Hz while the interpolated remotes move smoothly.
+var prev_sim_pos := Vector3.ZERO
 ## Display-only correction that decays to zero (keeps rendering continuous).
 var error_offset := Vector3.ZERO
 var last_yaw := 0.0
@@ -61,6 +66,7 @@ func _init() -> void:
 ## (Re)bases the predictor on an authoritative position (world entry / respawn).
 func reset(pos: Vector3) -> void:
 	sim_pos = pos
+	prev_sim_pos = pos
 	error_offset = Vector3.ZERO
 	pending.clear()
 	last_yaw = 0.0
@@ -70,13 +76,16 @@ func reset(pos: Vector3) -> void:
 func clear() -> void:
 	pending.clear()
 	sim_pos = Vector3.ZERO
+	prev_sim_pos = Vector3.ZERO
 	error_offset = Vector3.ZERO
 	active = false
 
 
-## What the local EntityView should be drawn at.
-func render_position() -> Vector3:
-	return sim_pos + error_offset
+## What the local EntityView should be drawn at. `alpha` is the fraction of the
+## current prediction tick elapsed (0 = just ticked, 1 = next tick due), so the
+## display interpolates one tick behind the simulation for smooth motion.
+func render_position(alpha: float = 1.0) -> Vector3:
+	return prev_sim_pos.lerp(sim_pos, clampf(alpha, 0.0, 1.0)) + error_offset
 
 
 ## Applies one local input immediately. Returns false (does nothing) for
@@ -85,6 +94,7 @@ func apply_input(seq: int, move: Vector2, yaw: float, dt: float = Protocol.TICK_
 	if not active or not Movement.is_input_finite(move, yaw):
 		return false
 	var before := Time.get_ticks_usec()
+	prev_sim_pos = sim_pos
 	sim_pos = Movement.step(sim_pos, move, yaw, dt, speed, obstacles, half, floor_y)
 	last_yaw = yaw
 	applied += 1
@@ -103,7 +113,7 @@ func apply_input(seq: int, move: Vector2, yaw: float, dt: float = Protocol.TICK_
 ## `server_pos` and replays every remaining input. The distance between the old
 ## simulation and the replayed one is the correction: it is smoothed when small
 ## and snapped when large.
-func reconcile(server_pos: Vector3, acked_seq: int) -> void:
+func reconcile(server_pos: Vector3, acked_seq: int, alpha: float = 1.0) -> void:
 	if not active:
 		return
 	var discard := 0
@@ -113,7 +123,9 @@ func reconcile(server_pos: Vector3, acked_seq: int) -> void:
 		pending = pending.slice(discard)
 
 	var old_sim := sim_pos
-	var old_render := sim_pos + error_offset
+	# Continuity is against what is currently *displayed* (mid-tick interpolation
+	# included), not the un-interpolated sim, or each reconcile would pop forward.
+	var old_render := render_position(alpha)
 	var next := server_pos
 	for item: Dictionary in pending:
 		next = Movement.step(
@@ -130,11 +142,13 @@ func reconcile(server_pos: Vector3, acked_seq: int) -> void:
 	reconciles += 1
 	if correction > SNAP_DISTANCE:
 		snaps += 1
+		prev_sim_pos = next
 		error_offset = Vector3.ZERO
 	else:
-		# Absorb the whole correction into the smoothing offset so the render
-		# stays continuous, then let `advance` decay it.
-		error_offset = old_render - next
+		# Keep the interpolation start (`prev_sim_pos`) so the local player still
+		# eases between ticks; absorb the correction at the current tick fraction
+		# so the displayed transform stays continuous, then let `advance` decay it.
+		error_offset = old_render - prev_sim_pos.lerp(next, clampf(alpha, 0.0, 1.0))
 
 
 ## Decays the smoothing offset toward zero. Called every frame.

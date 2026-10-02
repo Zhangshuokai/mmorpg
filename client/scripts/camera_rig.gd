@@ -12,6 +12,10 @@ var camera: Camera3D
 
 
 func _ready() -> void:
+	# WorldView writes the local player's transform in its own _process; the rig
+	# must run *after* that, or it follows last frame's position and leaves the
+	# local character visibly ghosting/oscillating on screen while remotes look fine.
+	process_priority = 1
 	spring = SpringArm3D.new()
 	spring.name = "SpringArm"
 	spring.position = Vector3(0.0, 1.6, 0.0)

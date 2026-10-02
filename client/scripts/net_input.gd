@@ -84,6 +84,12 @@ func tick_input(delta: float, move: Vector2, yaw: float, buttons: int) -> void:
 	send_input(seq, move, yaw, buttons)
 
 
+## Fraction of the current prediction tick elapsed (0..1), used by WorldView to
+## interpolate the local player's displayed transform between ticks.
+func tick_alpha() -> float:
+	return clampf(_accum / Protocol.TICK_DT, 0.0, 1.0)
+
+
 func send_input(seq_value: int, move: Vector2, yaw: float, buttons: int) -> bool:
 	if not _can_send():
 		return false
@@ -224,7 +230,7 @@ func _process(delta: float) -> void:
 	if _reconcile_dirty:
 		_reconcile_dirty = false
 		if _have_server_pos:
-			predictor.reconcile(_server_pos, _acked_seq)
+			predictor.reconcile(_server_pos, _acked_seq, tick_alpha())
 	predictor.advance(delta)
 
 

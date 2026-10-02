@@ -48,7 +48,7 @@ func _process(_delta: float) -> void:
 	var predictor: Prediction = _net.input.predictor
 	if predictor == null or not predictor.active:
 		return
-	local_view.set_predicted_position(predictor.render_position())
+	local_view.set_predicted_position(predictor.render_position(_net.input.tick_alpha()))
 	local_view.set_predicted_yaw(predictor.last_yaw)
 
 
