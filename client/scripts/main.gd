@@ -27,6 +27,15 @@ var bot_check_respawn := false
 var bot_multiplayer := false
 var bot_seconds := 0.0
 
+## Optional auto-login (set by scripts/start_client.ps1 via --login-* args). With
+## --login-char the launcher also creates/selects a character and enters the world.
+var login_user := ""
+var login_pass := ""
+var login_char := ""
+var login_register := false
+var _auto_char_sent := false
+var _auto_char_done := false
+
 
 func _ready() -> void:
 	_parse_args()
@@ -96,6 +105,18 @@ func _ready() -> void:
 	hud.hide_hud()
 	ui_flow.hud = hud
 
+	_apply_auto_login()
+
+
+func _apply_auto_login() -> void:
+	if login_user.is_empty():
+		return
+	ui.set_credentials(login_user, login_pass)
+	if login_pass.is_empty():
+		ui.set_login_status("Type the password for '%s'." % login_user)
+		return
+	ui_flow.login_requested(login_user, login_pass, login_register)
+
 
 func _parse_args() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -126,6 +147,26 @@ func _parse_args() -> void:
 			if i + 1 < args.size():
 				i += 1
 				bot_seconds = maxf(0.0, float(args[i]))
+		elif arg == "--login-user":
+			if i + 1 < args.size():
+				i += 1
+				login_user = args[i]
+		elif arg == "--login-pass":
+			if i + 1 < args.size():
+				i += 1
+				login_pass = args[i]
+		elif arg == "--login-char":
+			if i + 1 < args.size():
+				i += 1
+				login_char = args[i]
+		elif arg == "--login-register":
+			login_register = true
+		elif arg.begins_with("--login-user="):
+			login_user = arg.substr("--login-user=".length())
+		elif arg.begins_with("--login-pass="):
+			login_pass = arg.substr("--login-pass=".length())
+		elif arg.begins_with("--login-char="):
+			login_char = arg.substr("--login-char=".length())
 		elif arg.begins_with("--host="):
 			host = arg.substr("--host=".length())
 		elif arg.begins_with("--port="):
@@ -156,6 +197,26 @@ func _on_character_list(list: Array) -> void:
 	if bot_mode:
 		return
 	ui_flow.on_character_list(list)
+	_maybe_auto_enter(list)
+
+
+## --login-char support: select the named character, or create it once and select
+## it on the following list. Stops at character select when --login-char is absent.
+func _maybe_auto_enter(list: Array) -> void:
+	if login_char.is_empty():
+		return
+	var found_id := 0
+	for entry: Dictionary in list:
+		if String(entry.get("name", "")) == login_char:
+			found_id = int(entry.get("id", 0))
+			break
+	if found_id != 0:
+		if not _auto_char_done:
+			_auto_char_done = true
+			ui_flow.select_requested(found_id)
+	elif not _auto_char_sent:
+		_auto_char_sent = true
+		ui_flow.create_requested(login_char)
 
 
 func _on_enter_world(self_id: int, spawn: Vector3, hp: int) -> void:

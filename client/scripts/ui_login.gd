@@ -191,6 +191,13 @@ func password_length() -> int:
 	return _pass_edit.text.length()
 
 
+## Pre-fills the login fields (used by scripts/start_client.ps1 so a launcher can
+## hand credentials to the client without a human typing them).
+func set_credentials(username: String, password: String) -> void:
+	_user_edit.text = username
+	_pass_edit.text = password
+
+
 func selected_character_id() -> int:
 	var selected := _char_list.get_selected_items()
 	if selected.is_empty():
