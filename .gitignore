@@ -7,6 +7,9 @@ export/
 *.pck
 *.zip
 
+# Windows shortcuts (machine-local; point at gitignored build/ launcher)
+*.lnk
+
 # Shared contract junctions (created by scripts/link_shared.ps1)
 client/shared
 server/shared

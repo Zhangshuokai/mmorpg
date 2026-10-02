@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>MMORPG · 启动说明</title>
+<style>
+  :root{
+    --bg:#0a0f1e; --bg2:#0d1428; --surface:#121b36; --surface2:#16213f;
+    --text:#e8edff; --muted:#9aa7c7; --border:rgba(255,255,255,.09);
+    --accent:#6ea8fe; --accent2:#a78bfa; --ok:#34d399; --warn:#fbbf24; --code:#0b1226;
+    --radius:16px; --maxw:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(110,168,254,.20), transparent 60%),
+      radial-gradient(1000px 500px at 95% 0%, rgba(167,139,250,.16), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif;
+    line-height:1.7; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,pre,kbd{font-family:"Cascadia Code",Consolas,"Courier New",monospace}
+
+  /* header */
+  header{
+    position:sticky; top:0; z-index:20; backdrop-filter:blur(12px);
+    background:rgba(10,15,30,.72); border-bottom:1px solid var(--border);
+  }
+  .bar{max-width:var(--maxw);margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:18px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.3px}
+  .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 22px rgba(110,168,254,.5)}
+  .nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+  .nav a{color:var(--muted);padding:6px 10px;border-radius:10px;font-size:14px}
+  .nav a:hover{background:var(--surface);color:var(--text);text-decoration:none}
+  .pill{font-size:12px;color:var(--muted);border:1px solid var(--border);padding:3px 10px;border-radius:999px}
+
+  /* layout */
+  main{max-width:var(--maxw);margin:0 auto;padding:0 20px 80px}
+  section{padding:46px 0;scroll-margin-top:74px}
+  h2{font-size:26px;margin:0 0 6px}
+  h3{font-size:17px;margin:26px 0 10px}
+  .lead{color:var(--muted);margin:0 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+
+  /* hero */
+  .hero{padding:74px 0 30px;text-align:center}
+  .hero .kicker{color:var(--accent);letter-spacing:.28em;font-size:12px;text-transform:uppercase}
+  .hero h1{font-size:clamp(32px,5vw,52px);margin:14px 0 10px;line-height:1.15}
+  .hero h1 span{background:linear-gradient(120deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{color:var(--muted);max-width:640px;margin:0 auto 26px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-block;padding:11px 20px;border-radius:12px;border:1px solid var(--border);color:var(--text);background:var(--surface);font-weight:600}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#08122b}
+  .btn:hover{text-decoration:none;transform:translateY(-1px)}
+
+  /* cards */
+  .card{background:linear-gradient(180deg,var(--surface),var(--bg2));border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px}
+  .card h4{margin:2px 0 8px;font-size:15px}
+  .card p{margin:0;color:var(--muted);font-size:14px}
+  .tag{display:inline-block;font-size:11px;color:var(--accent);border:1px solid rgba(110,168,254,.35);border-radius:999px;padding:1px 9px;margin-bottom:8px}
+
+  /* steps */
+  .step{display:flex;gap:14px;margin:16px 0}
+  .num{flex:0 0 30px;height:30px;border-radius:10px;display:grid;place-items:center;font-weight:700;color:#08122b;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .step .body{flex:1;min-width:0}
+  .step h4{margin:3px 0 6px;font-size:15px}
+
+  /* code */
+  .code{position:relative;margin:10px 0}
+  .code pre{margin:0;background:var(--code);border:1px solid var(--border);border-radius:12px;padding:14px 44px 14px 16px;overflow-x:auto;font-size:13.5px;line-height:1.6}
+  .code code{white-space:pre}
+  .copy{position:absolute;top:8px;right:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);border-radius:8px;padding:3px 9px;font-size:12px;cursor:pointer}
+  .copy:hover{color:var(--text)}
+  .cmt{color:#6b7aa8}
+  .var{color:#7dd3fc}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  td code{background:var(--code);border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:12.5px}
+
+  .note{border-left:3px solid var(--warn);background:rgba(251,191,36,.07);border-radius:0 12px 12px 0;padding:12px 16px;color:#f5e6bd;font-size:14px;margin:16px 0}
+  .note.ok{border-color:var(--ok);background:rgba(52,211,153,.07);color:#c9f7e6}
+  footer{border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+  footer .inner{max-width:var(--maxw);margin:0 auto;padding:26px 20px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  ul.clean{list-style:none;padding:0;margin:0}
+  ul.clean li{padding:6px 0;color:var(--muted);border-bottom:1px solid var(--border);font-size:14px}
+  ul.clean li b{color:var(--text)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="brand"><span class="logo"></span>MMORPG</div>
+    <nav class="nav">
+      <a href="#quick">快速开始</a>
+      <a href="#gui">图形化启动器</a>
+      <a href="#env">环境</a>
+      <a href="#server">服务端</a>
+      <a href="#client">客户端</a>
+      <a href="#check">自检 / CI</a>
+      <a href="#trouble">排错</a>
+    </nav>
+    <span class="pill">Godot 4.7.1</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- hero -->
+  <section class="hero">
+    <div class="kicker">Dedicated Server · 服务端权威</div>
+    <h1>启动说明 <span>Guide</span></h1>
+    <p>双工程（server / client）+ 共享契约（shared）。本页给出最短可跑路径：准备环境、启动服务端并监控、启动客户端登录，以及自检与 CI。</p>
+    <div class="cta">
+      <a class="btn primary" href="#quick">开始启动</a>
+      <a class="btn" href="#client">启动客户端</a>
+      <a class="btn" href="#trouble">常见问题</a>
+    </div>
+  </section>
+
+  <!-- quick -->
+  <section id="quick">
+    <h2>快速开始</h2>
+    <p class="lead">三步跑起来。所有命令在仓库根目录执行，默认端口 <code>7000</code>。</p>
+    <div class="grid">
+      <div class="card"><span class="tag">Step 1</span><h4>准备环境</h4><p>设置 <code>$env:GODOT</code>，联接 shared，导入两个工程（首次必须）。</p></div>
+      <div class="card"><span class="tag">Step 2</span><h4>启动服务端</h4><p><code>scripts/start_server.ps1</code> 一键启动并监控状态。</p></div>
+      <div class="card"><span class="tag">Step 3</span><h4>启动客户端</h4><p><code>scripts/start_client.ps1</code> 拉起窗口并自动登录。</p></div>
+    </div>
+    <div class="code"><button class="copy">复制</button><pre><code><span class="cmt"># 1. 准备环境（首次/每个新 worktree）</span>
+$env:GODOT = "D:\code\game\godot_engine\Godot_v4.7.1-stable_win64_console.exe"
+powershell -File scripts/link_shared.ps1
+& $env:GODOT --headless --path server --import
+& $env:GODOT --headless --path client --import
+
+<span class="cmt"># 2. 启动服务端（后台 + 状态可查）</span>
+powershell -File scripts/start_server.ps1
+
+<span class="cmt"># 3. 启动客户端并自动登录（新账号用 -Register）</span>
+powershell -File scripts/start_client.ps1 -User alice -Password secret1 -Character Hero -Register</code></pre></div>
+  </section>
+
+  <!-- gui -->
+  <section id="gui">
+    <h2>图形化启动器</h2>
+    <p class="lead">不想记命令就用 WinForms 启动器：所有配置都在界面里改，点“保存配置”写入 <code>.local/launcher.json</code>，下次自动载入。</p>
+    <div class="code"><button class="copy">复制</button><pre><code><span class="cmt"># 打开图形化启动器（配置 + 启动/停止服务端与客户端）</span>
+powershell -File scripts/launcher.ps1
+
+<span class="cmt"># 无需弹窗的自检 / 冒烟测试（供 CI、agent 使用）</span>
+powershell -File scripts/launcher.ps1 -SelfTest
+powershell -File scripts/launcher.ps1 -SmokeTest
+
+<span class="cmt"># 打包成 exe（双击运行，无需命令行）</span>
+powershell -File scripts/build_launcher_exe.ps1
+<span class="cmt"># -> build/MMORPG-Launcher.exe（约 5KB，放在仓库内即可）</span></code></pre></div>
+    <div class="grid">
+      <div class="card"><span class="tag">配置可视化</span><h4>不再传参数</h4><p>引擎路径、端口、数据库、<code>--no-mobs</code>/<code>--aoi-stats</code>、登录账号/密码/角色、窗口数量都在表单里；保存为 <code>.local/launcher.json</code>（gitignore）。</p></div>
+      <div class="card"><span class="tag">一键启停</span><h4>服务端 + 客户端</h4><p>“启动/停止服务端”“启动客户端”“停止客户端”按钮，内部复用 <code>start_server.ps1</code> / <code>start_client.ps1</code>，行为一致。</p></div>
+      <div class="card"><span class="tag">可打包 exe</span><h4>双击即用</h4><p><code>build_launcher_exe.ps1</code> 编译出 <code>build/MMORPG-Launcher.exe</code> 原生包装器：无控制台窗口，转发参数并透传退出码。</p></div>
+      <div class="card"><span class="tag">状态监控</span><h4>自动刷新</h4><p>每 2 秒刷新服务端 PID 与日志尾部；也可点“刷新状态”。“打开启动说明”直达本页。</p></div>
+    </div>
+    <div class="note">依赖 Windows PowerShell 5.1 + .NET WinForms（Windows 自带）。脚本源码为 UTF-8 <b>带 BOM</b>，否则中文界面会乱码。</div>
+  </section>
+
+  <!-- env -->
+  <section id="env">
+    <h2>环境准备</h2>
+    <p class="lead">引擎、导出模板、<code>godot-sqlite</code> 三者版本必须一致，错配会静默破坏导出或插件加载。</p>
+    <div class="grid">
+      <div class="card"><span class="tag">引擎</span><h4>Godot 4.7.1-stable</h4><p>未加入 PATH；脚本只读 <code>$env:GODOT</code>，不要把绝对路径写进被提交的脚本。</p></div>
+      <div class="card"><span class="tag">插件</span><h4>godot-sqlite v4.9</h4><p><code>compatibility_minimum = "4.7"</code>；<code>server/addons/godot-sqlite/</code> 必须提交（约 300MB）。</p></div>
+      <div class="card"><span class="tag">共享契约</span><h4>shared 目录联接</h4><p><code>link_shared.ps1</code> 幂等创建 <code>client/shared</code>、<code>server/shared</code>；每个 worktree 都要重跑。</p></div>
+    </div>
+    <div class="code"><button class="copy">复制</button><pre><code><span class="cmt"># 校验引擎版本</span>
+& $env:GODOT --version
+<span class="cmt"># -> 4.7.1.stable.official.a13da4feb</span>
+
+<span class="cmt"># 联接共享契约 + 门禁校验（RPC 契约对账）</span>
+powershell -File scripts/link_shared.ps1 -Verify</code></pre></div>
+    <div class="note">解析检查（没有独立 lint/typecheck，headless 启动即报解析错误）：
+      <br><code>&amp; $env:GODOT --headless --path server --quit-after 3 -- --server</code>
+      <br><code>&amp; $env:GODOT --headless --path client --quit-after 5</code></div>
+  </section>
+
+  <!-- server -->
+  <section id="server">
+    <h2>服务端</h2>
+    <p class="lead">推荐用启动工具：它把服务端放到后台运行，并记录 PID 与日志，方便随时查看状态。</p>
+    <div class="code"><button class="copy">复制</button><pre><code><span class="cmt"># 启动（默认 127.0.0.1:7000，DB=.local/mmorpg_server.db）</span>
+powershell -File scripts/start_server.ps1
+
+<span class="cmt"># 监控：RUNNING/STOPPED + 最后 ready 行 + 日志尾部（-Follow 每 5s 刷新）</span>
+powershell -File scripts/start_server.ps1 -Action status -Follow
+
+<span class="cmt"># 其它动作</span>
+powershell -File scripts/start_server.ps1 -Action logs
+powershell -File scripts/start_server.ps1 -Action restart -NoMobs
+powershell -File scripts/start_server.ps1 -Action stop</code></pre></div>
+
+    <h3>工具参数</h3>
+    <table>
+      <tr><th>参数</th><th>说明</th></tr>
+      <tr><td><code>-Action</code></td><td><code>start</code> / <code>stop</code> / <code>restart</code> / <code>status</code> / <code>logs</code></td></tr>
+      <tr><td><code>-Port</code></td><td>UDP 端口，默认 <code>7000</code></td></tr>
+      <tr><td><code>-Database</code></td><td>SQLite 路径（相对路径按 <b>项目目录</b> 解析）</td></tr>
+      <tr><td><code>-NoMobs</code> / <code>-AoiStats</code></td><td>透传 <code>--no-mobs</code> / <code>--aoi-stats</code></td></tr>
+      <tr><td><code>-Follow</code> / <code>-Interval</code></td><td><code>status</code> 的循环监控模式</td></tr>
+    </table>
+
+    <h3>手动启动（等价）</h3>
+    <div class="code"><button class="copy">复制</button><pre><code>& $env:GODOT --headless --path server -- --server --port 7000 --db .local/mmorpg_server.db
+
+<span class="cmt"># 看到这行才算起来：</span>
+<span class="cmt"># [server] listening on UDP 7000 (max 16 clients, tick 20Hz)</span></code></pre></div>
+    <div class="note ok">PID 与日志位于 <code>server/.local/</code>：<code>server.pid</code>、<code>server.out.log</code>、<code>server.err.log</code>。该目录与数据库一样被 gitignore。</div>
+  </section>
+
+  <!-- client -->
+  <section id="client">
+    <h2>客户端</h2>
+    <p class="lead">启动工具会拉起 GUI 窗口（无额外控制台），可自动填账号、登录，甚至创建/选择角色并进入世界。</p>
+    <div class="code"><button class="copy">复制</button><pre><code><span class="cmt"># 自动登录；带 -Character 会建/选该角色并进入世界</span>
+powershell -File scripts/start_client.ps1 -User alice -Password secret1 -Character Hero -Register
+
+<span class="cmt"># 只登录到角色选择界面（省去 -Character）</span>
+powershell -File scripts/start_client.ps1 -User alice -Password secret1
+
+<span class="cmt"># 一次开两个窗口（用户名/角色名自动加 1、2 后缀）</span>
+powershell -File scripts/start_client.ps1 -User alice -Password secret1 -Character Hero -Register -Count 2
+
+<span class="cmt"># 关闭上次启动的窗口</span>
+powershell -File scripts/start_client.ps1 -Action stop</code></pre></div>
+
+    <h3>工具参数</h3>
+    <table>
+      <tr><th>参数</th><th>说明</th></tr>
+      <tr><td><code>-User</code> / <code>-Password</code></td><td>账号；只给 <code>-User</code> 时预填用户名、密码手输</td></tr>
+      <tr><td><code>-Character</code></td><td>角色名；省略则停在角色选择界面</td></tr>
+      <tr><td><code>-Register</code></td><td>注册新账号（而不是登录）</td></tr>
+      <tr><td><code>-Count</code></td><td>窗口数量，默认 1</td></tr>
+      <tr><td><code>-ServerHost</code> / <code>-Port</code></td><td>目标地址，默认 <code>127.0.0.1:7000</code></td></tr>
+    </table>
+
+    <h3>手动启动（等价）</h3>
+    <div class="code"><button class="copy">复制</button><pre><code><span class="cmt"># GUI 版引擎（少一个控制台窗口）</span>
+& 'D:\code\game\godot_engine\Godot_v4.7.1-stable_win64.exe' --path client -- --host 127.0.0.1 --port 7000</code></pre></div>
+
+    <h3>操作键位</h3>
+    <ul class="clean">
+      <li><b>WASD</b> 移动 &nbsp;·&nbsp; <b>鼠标</b> 转视角 &nbsp;·&nbsp; <b>左键 / 空格 / 1</b> 攻击</li>
+      <li><b>Tab</b> 选择最近怪物 &nbsp;·&nbsp; <b>Esc</b> 释放鼠标</li>
+    </ul>
+    <div class="note">两个窗口要用 <b>不同账号</b>，才能互相看到对方；客户端只发输入/意图，位置以服务端为准（本地预测仅为手感）。</div>
+  </section>
+
+  <!-- check -->
+  <section id="check">
+    <h2>自检与 CI</h2>
+    <p class="lead">无头 bot 是客户端唯一的自动化验证手段；单元测试与 CI 保证重构不回归。</p>
+    <div class="code"><button class="copy">复制</button><pre><code><span class="cmt"># 无头 bot 自检（退出码 0 = 全通过；端口需与服务端一致）</span>
+& $env:GODOT --headless --path client -- --bot --host 127.0.0.1 --port 7000
+
+<span class="cmt"># 必须并发两个 bot 才能测“看到另一名玩家移动”</span>
+& $env:GODOT --headless --path client -- --bot --port 7000 --bot-user a --bot-require-peer
+& $env:GODOT --headless --path client -- --bot --port 7000 --bot-user b --bot-require-peer
+
+<span class="cmt"># 单元测试（必须用仓库绝对路径，相对路径会解析成 res://tests/... 而失败）</span>
+& $env:GODOT --headless --path server --script "<repo-root>\tests\run_tests.gd"
+
+<span class="cmt"># 一键 CI：Verify -> 解析 -> 单测 -> bot -> 导出（Linux 服务端 + Windows 客户端）</span>
+powershell -File scripts/ci.ps1 -Godot $env:GODOT</code></pre></div>
+    <div class="grid">
+      <div class="card"><span class="tag">bot 输出契约</span><h4>别改格式</h4><p><code>[bot] CHECK &lt;name&gt;=OK|FAIL|N/A</code> … <code>[bot] RESULT PASS</code>，退出码 0/1，CI 依赖它。</p></div>
+      <div class="card"><span class="tag">bot 断言</span><h4>按域拆分</h4><p><code>client/scripts/bot_checks/bot_check_&lt;域&gt;.gd</code>，运行时 glob 自动注册；现有 session / movement / combat / inventory / zones。</p></div>
+      <div class="card"><span class="tag">区域隔离</span><h4>opt-in 开关</h4><p>不带 <code>--zone-check N</code> 时 zones 断言不产出；两个 bot 加 <code>--bot-multiplayer --zone-check 1/2</code>。</p></div>
+    </div>
+  </section>
+
+  <!-- trouble -->
+  <section id="trouble">
+    <h2>常见问题</h2>
+    <p class="lead">按经验整理的高频坑，全部在本仓库实测过。</p>
+    <div class="grid">
+      <div class="card"><h4>headless 报解析错误 / class_name 未注册</h4><p>先跑一次 <code>--import</code>（见“环境准备”）。新增脚本后也要重新 import。</p></div>
+      <div class="card"><h4>单元测试找不到脚本</h4><p>必须用 <b>仓库绝对路径</b> <code>--script "&lt;repo-root&gt;\tests\run_tests.gd"</code>；相对路径会解析成 <code>res://tests/…</code>。</p></div>
+      <div class="card"><h4><code>-Db</code> 参数直接报错</h4><p><code>-Db</code> 与 PowerShell 内置 <code>-Debug</code> 别名冲突；服务端工具的参数名是 <code>-Database</code>。</p></div>
+      <div class="card"><h4>客户端 <code>-Host</code> 报错</h4><p><code>-Host</code> 会撞 PowerShell 内置 <code>$Host</code>；用 <code>-ServerHost</code>。</p></div>
+      <div class="card"><h4>两个服务端端口冲突</h4><p>每个 worktree 用独立 <code>--port</code> 与 <code>--db .local/&lt;name&gt;.db</code>；<code>--db</code> 相对路径按项目目录解析（<code>server/.local/…</code>）。</p></div>
+      <div class="card"><h4>bot 复跑 <code>movement</code> FAIL</h4><p>怪被反复击杀后会漂到玩家身边，位移不足 1m。换一个干净的 <code>--db .local/&lt;new&gt;.db</code> 重跑。</p></div>
+      <div class="card"><h4>50+ bot 压测撞上限</h4><p><code>Protocol.MAX_CLIENTS=16</code>；压测前需调大该常量或分线。</p></div>
+      <div class="card"><h4>中文文件在 PowerShell 里乱码</h4><p>文件是 UTF-8 无 BOM；<code>Get-Content</code>/<code>Select-String</code> 需加 <code>-Encoding UTF8</code>。乱码是控制台问题，别改编码。</p></div>
+    </div>
+  </section>
+
+  <section id="arch">
+    <h2>系统构成</h2>
+    <div class="grid">
+      <div class="card"><h4>server/</h4><p>专用服务器：20Hz 权威世界 + 装配（main.gd）+ 各子系统（world_*）+ 技能/背包/区域。</p></div>
+      <div class="card"><h4>client/</h4><p>Windows 客户端：登录/角色 UI、本地预测、插值渲染、无头 bot 自检。</p></div>
+      <div class="card"><h4>shared/</h4><p>契约与共享纯函数：协议/RPC、移动结算、战斗公式、数据表、DTO。经目录联接映射进两端。</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="inner">
+    <div>MMORPG · 启动说明 · Godot 4.7.1-stable · 端口 7000 (UDP/ENet)</div>
+    <div>详细架构与排错见仓库 <code>AGENTS.md</code></div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pre = btn.parentElement.querySelector('pre');
+      var text = pre ? pre.innerText : '';
+      navigator.clipboard.writeText(text).then(function(){
+        var old = btn.textContent; btn.textContent = '已复制'; 
+        setTimeout(function(){ btn.textContent = old; }, 1200);
+      });
+    });
+  });
+</script>
+</body>
+</html>
